@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- * מסע הזרם - Code.gs
+ * מגמת אלקטרוניקה ומחשבים - Code.gs
  * שרת ה-Backend (Google Apps Script) עבור פלטפורמת הלמידה.
  * משתמש בגיליון Google Sheets מחובר כמסד נתונים.
  *
@@ -35,7 +35,7 @@ function doPost(e) {
 
 function doGet() {
   return ContentService.createTextOutput(
-    'מסע הזרם API פעיל. יש לשלוח בקשות POST בלבד.'
+    'מגמת אלקטרוניקה ומחשבים - API פעיל. יש לשלוח בקשות POST בלבד.'
   ).setMimeType(ContentService.MimeType.TEXT);
 }
 

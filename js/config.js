@@ -6,7 +6,7 @@
 // השרת באמצעות localStorage - כך אפשר לבדוק הכל בלי לפרוס שום דבר בגוגל.
 export const CONFIG = {
   API_URL: '', // לדוגמה: 'https://script.google.com/macros/s/AKfycb.../exec'
-  APP_NAME: 'מסע הזרם',
+  APP_NAME: 'מגמת אלקטרוניקה ומחשבים',
   ANSWER_TOLERANCE_PCT: 0.03, // 3% טולרנס בתשובות מספריות
   SESSION_KEY: 'masa-hazerem-session',
 };

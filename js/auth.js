@@ -8,7 +8,7 @@ export function renderLogin(app, onLoggedIn) {
     <form class="login-card glass" id="login-form">
       <div class="login-logo">⚡</div>
       <h1 class="neon-title">${CONFIG.APP_NAME}</h1>
-      <p class="sub">סימולטור למידה אינטראקטיבי בתורת החשמל</p>
+      <p class="sub">סימולטור למידה אינטראקטיבי</p>
       <div class="login-error" id="login-error"></div>
       <div class="field" style="text-align:right;">
         <label for="username">שם משתמש</label>

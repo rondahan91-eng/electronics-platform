@@ -5,6 +5,7 @@
 import { curriculumForGrade } from './curriculum.js';
 import { mountTopic } from './game/gameEngine.js';
 import { fetchMyProgress, fetchGrades } from './api.js';
+import { CONFIG } from './config.js';
 import { topbarHtml, wireLogout, toast } from './ui.js';
 import { playClick } from './game/audio.js';
 
@@ -57,7 +58,7 @@ export async function mountHome(app, session, onLogout) {
           <div class="level-grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr));">${cards}</div>
         </div>
       </div>
-      <footer class="foot">מסע הזרם ⚡ סימולטור למידה אינטראקטיבי — תורת החשמל והאלקטרוניקה</footer>`;
+      <footer class="foot">${CONFIG.APP_NAME} ⚡ סימולטור למידה אינטראקטיבי</footer>`;
 
     wireLogout(onLogout);
     app.querySelectorAll('.level-node:not(.locked)').forEach(n => {

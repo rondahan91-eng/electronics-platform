@@ -49,7 +49,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
           <div class="level-grid">${nodes.join('')}</div>
         </div>
       </div>
-      <footer class="foot">${CONFIG.APP_NAME} ⚡ סימולטור למידה אינטראקטיבי — תורת החשמל והאלקטרוניקה</footer>`;
+      <footer class="foot">${CONFIG.APP_NAME} ⚡ סימולטור למידה אינטראקטיבי</footer>`;
 
     wireLogout(onLogout);
     document.getElementById('back-home').addEventListener('click', onBack);
