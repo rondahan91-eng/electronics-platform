@@ -4,24 +4,9 @@
 // המתפצלות באופן פרופורציוני לזרם האמיתי בכל ענף) מופיעה רק כשהמעגל
 // "אנרגטי" - כלומר לאחר שנסגר עם תשובה נכונה (energized=true).
 // ==========================================================================
+import { resetPid, nextPid, GLOW_FILTERS, labeledText } from './svgUtils.js';
+
 const LEAF_W = 108, LEAF_H = 60, GAP = 34, RAIL = 26, MARGIN = 46;
-
-let pid = 0;
-const nextPid = () => 'p' + (++pid);
-
-// שימו לב: filterUnits="userSpaceOnUse" עם תחום קבוע (במקום האחוזים המחושבים
-// כברירת מחדל לפי ה-bounding box של האלמנט) - חיוני כאן כי לחוטים אנכיים/אופקיים
-// טהורים יש bounding box עם מימד אחד = 0 (רוחב או גובה), מה שהופך את תחום ה-
-// פילטר האחוזי לבלתי-קיים (220%×0=0) וגורם לחוט כולו "להיעלם" בדפדפן.
-const GLOW_FILTERS = `
-      <filter id="glow" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="4000" height="4000">
-        <feGaussianBlur stdDeviation="2.6" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <filter id="dotglow" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="4000" height="4000">
-        <feGaussianBlur stdDeviation="2.2" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>`;
 
 // ---------------------------------------------------------------- מדידה/פריסה
 function measure(node) {
@@ -185,25 +170,6 @@ function renderNode(node, vMax, maxCurrent, out, energized) {
   });
 }
 
-// תווית עם "לוחית" רקע כהה מאחוריה - כדי שתישאר קריאה גם כשחוט זוהר או
-// אמפר המסקוט עוברים מתחתיה (רוחב מוערך לפי מונוספייס, בלי תלות ב-DOM).
-function labelPlate(x, y, text, { fontSize = 11, anchor = 'middle' } = {}) {
-  const charW = fontSize * 0.62;
-  const w = text.length * charW + 10;
-  const h = fontSize + 9;
-  let rx = x - w / 2;
-  if (anchor === 'start') rx = x;
-  else if (anchor === 'end') rx = x - w;
-  const ry = y - h * 0.62;
-  return `<rect x="${rx.toFixed(1)}" y="${ry.toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="4" fill="#080b16" fill-opacity="0.86"/>`;
-}
-function labeledText(x, y, text, cls, opts = {}) {
-  const anchor = opts.anchor || 'middle';
-  const fontSize = cls === 'comp-label' ? 12 : 11;
-  const plate = labelPlate(x, y, text, { fontSize, anchor });
-  return `${plate}<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}">${text}</text>`;
-}
-
 function fmtValue(node) {
   if (node.kind === 'r') return `${node.label}=${node.value}Ω`;
   if (node.kind === 'c') return `${node.label}=${node.value * 1e6}µF`;
@@ -238,7 +204,7 @@ function sourceSymbol(x, topY, isAC) {
 
 export function renderCircuit(level, energized = false) {
   if (level.circuitKind === 'opamp') return renderOpamp(level);
-  pid = 0;
+  resetPid();
   const root = level.root;
   measure(root);
   const srcX = MARGIN + 30;
@@ -285,10 +251,7 @@ function renderOpamp(level) {
   const svg = `
   <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="2.6" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
+      ${GLOW_FILTERS}
     </defs>
     <text x="40" y="${inverting ? 90 : 170}" text-anchor="middle" class="comp-val">Vin=${vin}V</text>
     <line x1="20" y1="${inverting ? 100 : 180}" x2="140" y2="${inverting ? 100 : 180}" stroke="var(--cyan)" stroke-width="4" filter="url(#glow)"/>

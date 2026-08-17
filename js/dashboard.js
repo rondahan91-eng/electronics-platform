@@ -2,14 +2,18 @@
 // dashboard.js - פאנל הניהול למורה: מעקב לפי נושא, ניהול משתמשים,
 // וניהול קצב פתיחת תוכנית הלימודים לכל שכבה.
 // ==========================================================================
-import { fetchClassProgress, createNewStudent, updateStudentPassword, fetchGrades, advanceGradeTopic } from './api.js';
+import { fetchClassProgress, createNewStudent, updateStudentPassword, fetchGrades, advanceGradeTopic, assignTopicToGrade, removeTopicFromGrade } from './api.js';
 import { TOPICS, allGrades, curriculumForGrade } from './curriculum.js';
 import { parseStudentsExcel } from './excelImport.js';
+import { mountTopic } from './game/gameEngine.js';
 import { topbarHtml, wireLogout, toast, fmtTime, escapeHtml } from './ui.js';
 
 export async function mountDashboard(app, session, onLogout) {
   const topicList = Object.values(TOPICS);
-  const state = { students: [], grades: [], topicId: topicList[0]?.id || null, gradeFilter: 'all', importPreview: null, importOutcome: null };
+  const state = {
+    students: [], grades: [], topicId: topicList[0]?.id || null, gradeFilter: 'all',
+    importPreview: null, importOutcome: null,
+  };
   await refresh();
 
   async function refresh() {
@@ -45,7 +49,7 @@ export async function mountDashboard(app, session, onLogout) {
       <tr>
         <td>${escapeHtml(r.displayName)}</td>
         <td>${escapeHtml(r.grade)}</td>
-        <td style="font-family:var(--font-mono);color:var(--cyan);">${escapeHtml(r.username)}</td>
+        <td style="font-family:var(--font-mono);color:var(--accent-strong);">${escapeHtml(r.username)}</td>
         <td style="font-family:var(--font-mono);">${escapeHtml(r.password)}</td>
       </tr>`).join('');
     const invalidRows = p.invalid.map(r => `<li>שורה ${r.row}: ${escapeHtml(r.reason)}</li>`).join('');
@@ -72,7 +76,7 @@ export async function mountDashboard(app, session, onLogout) {
     const createdRows = o.created.map(r => `
       <tr>
         <td>${escapeHtml(r.displayName)}</td>
-        <td style="font-family:var(--font-mono);color:var(--cyan);">${escapeHtml(r.username)}</td>
+        <td style="font-family:var(--font-mono);color:var(--accent-strong);">${escapeHtml(r.username)}</td>
         <td style="font-family:var(--font-mono);">${escapeHtml(r.password)}</td>
       </tr>`).join('');
     const failedRows = o.failed.map(r => `<li>${escapeHtml(r.displayName)}: ${escapeHtml(r.reason)}</li>`).join('');
@@ -101,13 +105,14 @@ export async function mountDashboard(app, session, onLogout) {
           .map(s => `
         <tr>
           <td>${escapeHtml(s.displayName || s.username)}</td>
-          <td style="color:var(--text-1);font-family:var(--font-mono);">${escapeHtml(s.username)}</td>
+          <td style="color:var(--ink-soft);font-family:var(--font-mono);">${escapeHtml(s.username)}</td>
           <td>${escapeHtml(s.grade || '—')}</td>
-          <td><b style="color:var(--cyan);">${s.highestLevel}</b> / ${topic ? topic.totalLevels : '—'}</td>
+          <td><b style="color:var(--accent-strong);">${s.highestLevel}</b> / ${topic ? topic.totalLevels : '—'}</td>
           <td>${fmtTime(s.avgTimeSeconds)}</td>
+          <td>${s.attempts ?? 0}</td>
           <td>${dqPill(s.disqualifications)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="6" class="center-msg">${state.students.length ? 'אין תלמידים בשכבה שנבחרה' : 'אין עדיין תלמידים רשומים במערכת'}</td></tr>`;
+      : `<tr><td colspan="7" class="center-msg">${state.students.length ? 'אין תלמידים בשכבה שנבחרה' : 'אין עדיין תלמידים רשומים במערכת'}</td></tr>`;
 
     const studentOptions = state.students
       .map(s => `<option value="${s.studentId}">${escapeHtml(s.displayName || s.username)} (${escapeHtml(s.username)})</option>`)
@@ -122,31 +127,56 @@ export async function mountDashboard(app, session, onLogout) {
       allGrades().map(g => `<option value="${g}" ${g === state.gradeFilter ? 'selected' : ''}>כיתה ${escapeHtml(g)}</option>`).join('');
 
     const curriculaHtml = allGrades().map(grade => {
-      const gradeState = state.grades.find(g => g.grade === grade) || { unlockedCount: 1 };
-      const topics = curriculumForGrade(grade);
-      const chips = topics.map((t, i) => {
-        const unlocked = i < gradeState.unlockedCount;
-        return `<span class="pill ${unlocked ? 'ok' : 'warn'}" style="margin-left:6px;">${unlocked ? '🔓' : '🔒'} ${escapeHtml(t.title)}</span>`;
+      const gradeState = state.grades.find(g => g.grade === grade) || { unlockedCount: 1, topicIds: [] };
+      const assignedTopics = curriculumForGrade(grade, gradeState.topicIds); // בסדר קנוני, רק משובצים
+      const assignedOrderIndex = new Map(assignedTopics.map((t, i) => [t.id, i]));
+      const isFull = gradeState.unlockedCount >= assignedTopics.length && assignedTopics.length > 0;
+
+      const rows = topicList.map(t => {
+        const assignedIdx = assignedOrderIndex.get(t.id);
+        const assigned = assignedIdx !== undefined;
+        const unlocked = assigned && assignedIdx < gradeState.unlockedCount;
+        const statusIcon = !assigned ? '⬜' : unlocked ? '🔓' : '🔒';
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);">
+            <span>${statusIcon} ${escapeHtml(t.title)}</span>
+            <button type="button" class="secondary toggle-topic-btn" data-grade="${grade}" data-topic="${t.id}" data-assigned="${assigned}" style="padding:4px 10px;font-size:12px;">
+              ${assigned ? 'הסר משיבוץ ✖' : 'שבץ לכיתה ➕'}
+            </button>
+          </div>`;
       }).join('');
-      const isFull = gradeState.unlockedCount >= topics.length;
+
       return `
         <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
             <b>כיתה ${escapeHtml(grade)}</b>
-            <button type="button" class="secondary advance-grade-btn" data-grade="${grade}" ${isFull ? 'disabled' : ''} style="padding:6px 12px;font-size:12.5px;">
-              ${isFull ? '✅ כל הנושאים פתוחים' : 'פתח את הנושא הבא ▶'}
+            <button type="button" class="secondary advance-grade-btn" data-grade="${grade}" ${isFull || !assignedTopics.length ? 'disabled' : ''} style="padding:6px 12px;font-size:12.5px;">
+              ${isFull ? '✅ כל הנושאים המשובצים פתוחים' : 'פתח את הנושא הבא ▶'}
             </button>
           </div>
-          <div>${chips}</div>
+          <div>${rows}</div>
         </div>`;
     }).join('') || `<p class="form-note">לא הוגדרו שכבות בתוכנית הלימודים.</p>`;
+
+    const contentTopicsHtml = topicList.map(t => {
+      const assignedGrades = state.grades.filter(g => (g.topicIds || []).includes(t.id)).map(g => g.grade);
+      return `
+        <button type="button" class="secondary preview-topic-btn" data-topic="${t.id}"
+          style="width:100%;text-align:right;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;">
+          <span>
+            <b>${escapeHtml(t.title)}</b>
+            <span class="form-note" style="margin:2px 0 0;display:block;">${escapeHtml(t.subtitle || '')}</span>
+          </span>
+          <span class="pill ${assignedGrades.length ? 'ok' : 'warn'}" style="white-space:nowrap;">${assignedGrades.length ? 'משובץ: ' + assignedGrades.map(escapeHtml).join(', ') : 'לא משובץ לאף שכבה'}</span>
+        </button>`;
+    }).join('');
 
     app.innerHTML = `
       ${topbarHtml(session, 'פאנל ניהול למורה')}
       <div class="dash-wrap">
         <div class="glass" style="padding:18px 22px;margin-bottom:20px;">
           <h1 class="neon-title" style="font-size:22px;">🎓 לוח בקרה</h1>
-          <p style="color:var(--text-1);margin:0;">מעקב אחרי התקדמות ${state.students.length} תלמידים, ניהול משתמשים וניהול תוכנית הלימודים.</p>
+          <p style="color:var(--ink-soft);margin:0;">מעקב אחרי התקדמות ${state.students.length} תלמידים, ניהול משתמשים וניהול תוכנית הלימודים.</p>
         </div>
         <div class="dash-grid">
           <div>
@@ -166,7 +196,7 @@ export async function mountDashboard(app, session, onLogout) {
                 <table class="data-table">
                   <thead><tr>
                     <th>שם תלמיד/ה</th><th>שם משתמש</th><th>שכבה</th><th>שלב מקסימלי</th>
-                    <th>ממוצע זמן פתרון</th><th>פסילות (הספק יתר)</th>
+                    <th>ממוצע זמן פתרון</th><th>ניסיונות</th><th>פסילות</th>
                   </tr></thead>
                   <tbody>${rows}</tbody>
                 </table>
@@ -175,8 +205,14 @@ export async function mountDashboard(app, session, onLogout) {
 
             <div class="panel glass">
               <h3>🗂️ ניהול תוכניות לימוד</h3>
+              <p class="form-note" style="margin-top:0;">שבצו או הסירו נושאים מהמאגר לכל שכבה. פתיחת נושא משובץ (🔓) חלה על כל תלמידי השכבה יחד, בהתאם לקצב ההוראה בפועל.</p>
               ${curriculaHtml}
-              <p class="form-note">פתיחת נושא חלה על כל תלמידי השכבה יחד, בהתאם לקצב ההוראה בפועל בכיתה.</p>
+            </div>
+
+            <div class="panel glass">
+              <h3>📚 תוכן הלימוד — צפייה והתנסות</h3>
+              <p class="form-note" style="margin-top:0;">שחקו בכל שלב בכל נושא מהמאגר בדיוק כמו תלמיד/ה, גם נושאים שעדיין לא שובצו לאף שכבה - התוצאות כאן לא נשמרות במעקב הכיתתי.</p>
+              <div style="display:flex;flex-direction:column;gap:8px;">${contentTopicsHtml}</div>
             </div>
           </div>
 
@@ -237,12 +273,40 @@ export async function mountDashboard(app, session, onLogout) {
       render();
     });
 
+    app.querySelectorAll('.preview-topic-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const topic = TOPICS[btn.dataset.topic];
+        if (!topic) return;
+        mountTopic(app, session, topic, () => refresh(), onLogout, { preview: true });
+      });
+    });
+
     app.querySelectorAll('.advance-grade-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
           await advanceGradeTopic(btn.dataset.grade);
           toast(`נפתח הנושא הבא לכיתה ${btn.dataset.grade}`);
+          await refresh();
+        } catch (err) {
+          toast('שגיאה: ' + err.message, true);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    app.querySelectorAll('.toggle-topic-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const { grade, topic: topicId, assigned } = btn.dataset;
+        try {
+          if (assigned === 'true') {
+            await removeTopicFromGrade(grade, topicId);
+            toast(`הנושא הוסר משיבוץ כיתה ${grade}`);
+          } else {
+            await assignTopicToGrade(grade, topicId);
+            toast(`הנושא שובץ לכיתה ${grade}`);
+          }
           await refresh();
         } catch (err) {
           toast('שגיאה: ' + err.message, true);

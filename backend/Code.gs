@@ -12,9 +12,12 @@ const SHEET_USERS = 'Users';
 const SHEET_LEVELS = 'LevelProgress';
 const SHEET_GRADES = 'Grades';
 
-// מספר הנושאים בתוכנית הלימודים של כל שכבה - חייב להישאר מסונכרן ידנית עם
-// CURRICULA ב-js/curriculum.js (כאן זה רק כדי להגביל את "פתיחת הנושא הבא").
-const CURRICULUM_TOPIC_COUNTS = { 'י': 4 };
+// כל מזהי הנושאים האפשריים במאגר, ותוכנית הלימודים *ברירת המחדל* לכל שכבה
+// (משמשת רק לזריעת גיליון Grades חדש) - חייבים להישאר מסונכרנים ידנית עם
+// TOPICS/DEFAULT_CURRICULA ב-js/curriculum.js. השיבוץ בפועל לכל שכבה נשמר
+// בעמודת topicIds בגיליון Grades ונערך דרך פאנל הניהול.
+const ALL_TOPIC_IDS = ['charge-field', 'basic', 'advanced', 'ac', 'boss'];
+const DEFAULT_GRADE_TOPICS = { 'י': ['charge-field', 'basic', 'advanced', 'ac', 'boss'] };
 
 // -------------------------------------------------------------- כניסה ל-Web App
 function doPost(e) {
@@ -54,6 +57,8 @@ function routeAction(action, payload) {
     case 'fetchMyProgress': return fetchMyProgress(payload.studentId);
     case 'fetchGrades': return fetchGrades();
     case 'advanceGradeTopic': return advanceGradeTopic(payload.grade);
+    case 'assignTopicToGrade': return assignTopicToGrade(payload.grade, payload.topicId);
+    case 'removeTopicFromGrade': return removeTopicFromGrade(payload.grade, payload.topicId);
     default: throw new Error('פעולה לא מוכרת: ' + action);
   }
 }
@@ -74,10 +79,10 @@ function createSheet(ss, name) {
     sheet.appendRow(['admin', 'admin', sha256('admin123'), 'admin', 'מורה ראשי', '', now]);
     sheet.appendRow(['demo1', 'demo', sha256('demo1234'), 'student', 'תלמיד/ה לדוגמה', 'י', now]);
   } else if (name === SHEET_LEVELS) {
-    sheet.appendRow(['studentId', 'topicId', 'levelId', 'solved', 'timeSeconds', 'disqualifications', 'updatedAt']);
+    sheet.appendRow(['studentId', 'topicId', 'levelId', 'solved', 'timeSeconds', 'disqualifications', 'attempts', 'updatedAt']);
   } else if (name === SHEET_GRADES) {
-    sheet.appendRow(['grade', 'unlockedCount']);
-    Object.keys(CURRICULUM_TOPIC_COUNTS).forEach(g => sheet.appendRow([g, 1]));
+    sheet.appendRow(['grade', 'unlockedCount', 'topicIds']);
+    Object.keys(DEFAULT_GRADE_TOPICS).forEach(g => sheet.appendRow([g, 1, DEFAULT_GRADE_TOPICS[g].join(',')]));
   }
   sheet.setFrozenRows(1);
   return sheet;
@@ -146,7 +151,7 @@ function fetchMyProgress(studentId) {
   levelRows.forEach(r => {
     if (!byTopic[r.topicId]) byTopic[r.topicId] = { highestLevel: 0, levels: {} };
     const t = byTopic[r.topicId];
-    t.levels[r.levelId] = { solved: !!r.solved, timeSeconds: r.timeSeconds || null, disqualifications: r.disqualifications || 0 };
+    t.levels[r.levelId] = { solved: !!r.solved, timeSeconds: r.timeSeconds || null, disqualifications: r.disqualifications || 0, attempts: r.attempts || 0 };
     if (r.solved) t.highestLevel = Math.max(t.highestLevel, Number(r.levelId));
   });
   return byTopic;
@@ -161,24 +166,34 @@ function saveLevelResult(studentId, topicId, levelId, solved, timeSeconds, disqu
       const rowNum = r + 1;
       let dq = Number(values[r][5]) || 0;
       if (disqualified) dq += 1;
+      const attempts = (Number(values[r][6]) || 0) + 1;
       if (solved) {
         sheet.getRange(rowNum, 4).setValue(true);
         sheet.getRange(rowNum, 5).setValue(timeSeconds);
       }
       sheet.getRange(rowNum, 6).setValue(dq);
-      sheet.getRange(rowNum, 7).setValue(new Date());
+      sheet.getRange(rowNum, 7).setValue(attempts);
+      sheet.getRange(rowNum, 8).setValue(new Date());
       return { ok: true };
     }
   }
-  sheet.appendRow([studentId, topicId, levelId, !!solved, solved ? timeSeconds : '', disqualified ? 1 : 0, new Date()]);
+  sheet.appendRow([studentId, topicId, levelId, !!solved, solved ? timeSeconds : '', disqualified ? 1 : 0, 1, new Date()]);
   return { ok: true };
+}
+
+function parseTopicIds(str) {
+  return String(str || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
 function fetchGrades() {
   const rows = sheetToObjects(getSheet(SHEET_GRADES));
-  return Object.keys(CURRICULUM_TOPIC_COUNTS).map(grade => {
+  return Object.keys(DEFAULT_GRADE_TOPICS).map(grade => {
     const row = rows.find(r => r.grade === grade);
-    return { grade, unlockedCount: row ? Number(row.unlockedCount) : 1 };
+    return {
+      grade,
+      unlockedCount: row ? Number(row.unlockedCount) : 1,
+      topicIds: row ? parseTopicIds(row.topicIds) : DEFAULT_GRADE_TOPICS[grade].slice(),
+    };
   });
 }
 
@@ -186,17 +201,52 @@ function advanceGradeTopic(grade) {
   if (!grade) throw new Error('חסרה שכבה');
   const sheet = getSheet(SHEET_GRADES);
   const values = sheet.getDataRange().getValues();
-  const max = CURRICULUM_TOPIC_COUNTS[grade] || 1;
   for (let r = 1; r < values.length; r++) {
     if (values[r][0] === grade) {
+      const max = parseTopicIds(values[r][2]).length;
       const next = Math.min(Number(values[r][1]) + 1, max);
       sheet.getRange(r + 1, 2).setValue(next);
       return { unlockedCount: next };
     }
   }
-  const next = Math.min(2, max);
-  sheet.appendRow([grade, next]);
+  const topicIds = DEFAULT_GRADE_TOPICS[grade] || [];
+  const next = Math.min(2, topicIds.length);
+  sheet.appendRow([grade, next, topicIds.join(',')]);
   return { unlockedCount: next };
+}
+
+function assignTopicToGrade(grade, topicId) {
+  if (!grade || ALL_TOPIC_IDS.indexOf(topicId) === -1) throw new Error('שכבה או נושא לא תקינים');
+  const sheet = getSheet(SHEET_GRADES);
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    if (values[r][0] === grade) {
+      const topicIds = parseTopicIds(values[r][2]);
+      if (topicIds.indexOf(topicId) === -1) {
+        topicIds.push(topicId);
+        sheet.getRange(r + 1, 3).setValue(topicIds.join(','));
+      }
+      return { topicIds };
+    }
+  }
+  sheet.appendRow([grade, 1, topicId]);
+  return { topicIds: [topicId] };
+}
+
+function removeTopicFromGrade(grade, topicId) {
+  if (!grade) throw new Error('חסרה שכבה');
+  const sheet = getSheet(SHEET_GRADES);
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    if (values[r][0] === grade) {
+      const topicIds = parseTopicIds(values[r][2]).filter(id => id !== topicId);
+      const unlockedCount = Math.min(Number(values[r][1]) || 0, topicIds.length);
+      sheet.getRange(r + 1, 2).setValue(unlockedCount);
+      sheet.getRange(r + 1, 3).setValue(topicIds.join(','));
+      return { topicIds, unlockedCount };
+    }
+  }
+  throw new Error('שכבה לא נמצאה');
 }
 
 function summarizeStudent(user, levelRows) {
@@ -206,6 +256,7 @@ function summarizeStudent(user, levelRows) {
     ? Math.round(solvedRows.reduce((s, r) => s + Number(r.timeSeconds), 0) / solvedRows.length)
     : null;
   const disqualifications = rows.reduce((s, r) => s + (Number(r.disqualifications) || 0), 0);
+  const attempts = rows.reduce((s, r) => s + (Number(r.attempts) || 0), 0);
   const highestLevel = rows.filter(r => r.solved).reduce((m, r) => Math.max(m, Number(r.levelId)), 0);
   return {
     studentId: user.studentId,
@@ -215,5 +266,6 @@ function summarizeStudent(user, levelRows) {
     highestLevel,
     avgTimeSeconds,
     disqualifications,
+    attempts,
   };
 }

@@ -1,20 +1,30 @@
 // ==========================================================================
-// gameEngine.js - מפת השלבים בתוך נושא לימוד יחיד, מסך המשחק, בדיקת תשובות
-// ומנגנון השריפה. גנרי לחלוטין ביחס לנושא - מקבל אובייקט topic (ראו curriculum.js).
+// gameEngine.js - מפת השלבים בתוך נושא לימוד יחיד, מסך המשחק, בדיקת תשובות.
+// גנרי לחלוטין ביחס לנושא: מקבל אובייקט topic (ראו curriculum.js) שמספק
+// generateLevel/render/evaluateAnswer משלו - gameEngine לא מכיר פיזיקה
+// ספציפית (לא מעגלים, לא מטענים) כלל.
 // ==========================================================================
-import { triggerBurnAnimation, clearBurnMarks } from './circuitRenderer.js';
-import { findNode } from './circuitEngine.js';
 import { playSuccess, playError, playBurn, playClick } from './audio.js';
 import { saveLevelResult, fetchMyProgress } from '../api.js';
 import { CONFIG } from '../config.js';
 import { topbarHtml, wireLogout, toast, fmtTime } from '../ui.js';
 
-export async function mountTopic(app, session, topic, onBack, onLogout) {
+export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
+  const preview = !!opts.preview;
   const state = { progress: { highestLevel: 0, levels: {} }, levelId: null, startTs: null, hintsShown: 0 };
-  try {
-    const all = await fetchMyProgress(session.studentId);
-    state.progress = (all && all[topic.id]) || { highestLevel: 0, levels: {} };
-  } catch (e) { toast('שגיאה בטעינת התקדמות: ' + e.message, true); }
+  let cleanupLevel = () => {};
+  if (!preview) {
+    try {
+      const all = await fetchMyProgress(session.studentId);
+      state.progress = (all && all[topic.id]) || { highestLevel: 0, levels: {} };
+    } catch (e) { toast('שגיאה בטעינת התקדמות: ' + e.message, true); }
+  }
+
+  const previewBanner = preview
+    ? `<div class="glass" style="padding:10px 18px;margin-bottom:14px;border:1px solid var(--amber);color:#8a6d00;font-size:13.5px;">
+        🧪 מצב תצוגה מקדימה למורה — כל השלבים פתוחים לניסיון, וההתקדמות/ניסיונות כאן <b>לא נשמרים</b> במעקב הכיתתי.
+      </div>`
+    : '';
 
   renderMap();
 
@@ -23,8 +33,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
     const nodes = [];
     for (let id = 1; id <= topic.totalLevels; id++) {
       const done = !!(state.progress.levels[id] && state.progress.levels[id].solved);
-      const locked = id > highest + 1;
-      const current = id === highest + 1;
+      const locked = !preview && id > highest + 1;
+      const current = !preview && id === highest + 1;
       const cls = ['level-node'];
       if (locked) cls.push('locked');
       if (done) cls.push('done');
@@ -39,11 +49,12 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
     app.innerHTML = `
       ${topbarHtml(session, topic.title)}
       <div class="map-wrap">
-        <button class="secondary" id="back-home" style="margin-bottom:14px;">→ כל הנושאים</button>
+        <button class="secondary" id="back-home" style="margin-bottom:14px;">${preview ? '→ חזרה לפאנל הניהול' : '→ כל הנושאים'}</button>
+        ${previewBanner}
         <div class="glass" style="padding:20px 24px;margin-bottom:24px;">
           <h1 class="neon-title" style="font-size:22px;">⚡ ${topic.title}</h1>
-          <p style="color:var(--text-1);margin:0 0 4px;">${topic.subtitle || ''}</p>
-          <p style="color:var(--text-1);margin:0;">השלב הגבוה ביותר שהושלם: <b style="color:var(--cyan)">${highest}</b> / ${topic.totalLevels}</p>
+          <p style="color:var(--ink-soft);margin:0 0 4px;">${topic.subtitle || ''}</p>
+          ${preview ? '' : `<p style="color:var(--ink-soft);margin:0;">השלב הגבוה ביותר שהושלם: <b style="color:var(--accent-strong)">${highest}</b> / ${topic.totalLevels}</p>`}
         </div>
         <div class="tier-block">
           <div class="level-grid">${nodes.join('')}</div>
@@ -59,6 +70,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
   }
 
   function openLevel(id) {
+    cleanupLevel();
     state.levelId = id;
     state.startTs = performance.now();
     state.hintsShown = 0;
@@ -68,13 +80,14 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
   function renderLevel() {
     const level = topic.generateLevel(state.levelId);
     const q = level.question;
-    // המעגל מוצג "פתוח" (סטטי, ללא זרימה) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
-    const { svg } = topic.renderCircuit(level, false);
+    // הזירה מוצגת "פתוחה" (סטטית) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
+    const { svg } = topic.render(level, false);
 
     app.innerHTML = `
       ${topbarHtml(session, topic.title)}
       <div class="game-wrap">
         <button class="secondary" id="back-map" style="margin-bottom:14px;">→ חזרה למפה</button>
+        ${previewBanner}
         <div class="game-head">
           <div>
             <h2>שלב ${level.id}: ${level.title}</h2>
@@ -98,18 +111,25 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
             <button id="submit-answer">בדיקה ⚡</button>
             <button class="secondary" id="hint-btn" type="button">💡 רמז</button>
           </div>
+          <p class="form-note" style="margin:6px 0 0;">ניתן להשתמש בכתיב מדעי, למשל <code>2.5e-3</code> במקום 0.0025.</p>
           <div class="hint-line" id="hint-line"></div>
           <div class="qa-feedback" id="qa-feedback"></div>
         </div>
       </div>`;
 
     wireLogout(onLogout);
-    document.getElementById('back-map').addEventListener('click', () => renderMap());
+    document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
     document.getElementById('hint-btn').addEventListener('click', () => showHint(level));
     document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));
     const input = document.getElementById('answer-input');
     input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(level); });
     input.focus();
+
+    // הזדמנות אופציונלית לנושא להריץ אפקט חי בזמן שהשלב פתוח (למשל שעון
+    // עוצר) - gameEngine לא יודע/אכפת לו מה זה עושה, רק קורא ל-cleanup בעת יציאה.
+    if (topic.onLevelMount) {
+      cleanupLevel = topic.onLevelMount(document.getElementById('circuit-stage'), level) || (() => {});
+    }
   }
 
   function showHint(level) {
@@ -121,58 +141,60 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
   }
 
   function checkAnswer(level) {
+    cleanupLevel();
     const input = document.getElementById('answer-input');
     const val = parseFloat(input.value);
     const fb = document.getElementById('qa-feedback');
     if (Number.isNaN(val)) { fb.className = 'qa-feedback bad show'; fb.textContent = 'נא להזין מספר תקין.'; return; }
 
-    // מנקים סימון "נשרף" מניסיון קודם - כל ניסיון חדש מתחיל עם מעגל "תקין" מחדש.
-    const stageForClear = document.getElementById('circuit-stage');
-    if (stageForClear) clearBurnMarks(stageForClear);
+    const stage = document.getElementById('circuit-stage');
+    // מנקים סימוני פסילה מניסיון קודם - כל ניסיון חדש מתחיל מ"מצב תקין".
+    if (stage && topic.clearDisqualifyMarks) topic.clearDisqualifyMarks(stage);
 
-    const q = level.question;
-    const target = q.targetId && level.circuitKind === 'tree' ? findNode(level.root, q.targetId) : null;
+    const result = topic.evaluateAnswer(level, val);
 
-    // בדיקת עומס-יתר (הספק) - רלוונטית לשאלות זרם/מתח/הספק על נגד
-    if (target && target.kind === 'r' && ['current', 'voltage', 'power'].includes(q.ask)) {
-      let hypPower;
-      if (q.ask === 'power') hypPower = val;
-      else if (q.ask === 'current') hypPower = val * val * target.value;
-      else hypPower = (val * val) / target.value;
-      if (hypPower > target.maxPower) {
-        handleBurn(level, target, hypPower);
-        return;
-      }
-    }
+    if (result.outcome === 'disqualified') { handleDisqualify(level, result); return; }
+    if (result.outcome === 'correct') { handleSuccess(level); return; }
 
-    const tolerance = Math.max(Math.abs(q.answer) * CONFIG.ANSWER_TOLERANCE_PCT, 0.005);
-    const correct = Math.abs(val - q.answer) <= tolerance;
-
-    if (correct) handleSuccess(level);
-    else {
-      playError();
-      fb.className = 'qa-feedback bad show';
-      fb.textContent = '⚡ לא מדויק. בדקו שוב את הנוסחה ונסו שוב.';
-      document.getElementById('circuit-stage').classList.add('shake');
-      setTimeout(() => document.getElementById('circuit-stage').classList.remove('shake'), 400);
-    }
+    // incorrect (כולל variant קוסמטי אופציונלי, למשל 'weak')
+    showIncorrectFeedback(level, result);
   }
 
-  async function handleBurn(level, target, hypPower) {
+  function showIncorrectFeedback(level, result) {
+    playError();
+    const fb = document.getElementById('qa-feedback');
+    fb.className = 'qa-feedback bad show';
+    fb.textContent = result.message || '⚡ לא מדויק. בדקו שוב את הנוסחה ונסו שוב.';
+    const stage = document.getElementById('circuit-stage');
+    if (stage) {
+      if (topic.animateIncorrect) topic.animateIncorrect(stage, level, result);
+      else {
+        stage.classList.add('shake');
+        setTimeout(() => stage.classList.remove('shake'), 400);
+      }
+    }
+    recordAttempt(level, { solved: false, timeSeconds: null, disqualified: false });
+  }
+
+  async function recordAttempt(level, payload) {
+    if (preview) return; // תצוגה מקדימה למורה - לא נשמר במעקב הכיתתי
+    try { await saveLevelResult(session.studentId, topic.id, level.id, payload); }
+    catch (e) { toast('שגיאה בשמירת נתונים: ' + e.message, true); }
+  }
+
+  async function handleDisqualify(level, result) {
     playBurn();
     const stage = document.getElementById('circuit-stage');
-    triggerBurnAnimation(stage, target.id);
+    if (topic.triggerDisqualifyAnimation) topic.triggerDisqualifyAnimation(stage, level, result);
     const fb = document.getElementById('qa-feedback');
-    const pRounded = Math.round(hypPower * 100) / 100;
     fb.className = 'qa-feedback burn show';
-    fb.innerHTML = `🔥 <b>${target.label} נשרף!</b> התשובה שהזנתם הייתה גורמת להספק של כ-${pRounded} W על רכיב שסובל עד ${target.maxPower} W בלבד. פוסלים את הניסיון - נסו שוב.`;
+    fb.innerHTML = result.message;
     const dqEl = document.getElementById('dq-count');
     dqEl.textContent = (parseInt(dqEl.textContent, 10) || 0) + 1;
     const lv = state.progress.levels[level.id] || { solved: false, timeSeconds: null, disqualifications: 0 };
     lv.disqualifications = (lv.disqualifications || 0) + 1;
     state.progress.levels[level.id] = lv;
-    try { await saveLevelResult(session.studentId, topic.id, level.id, { solved: false, timeSeconds: null, disqualified: true }); }
-    catch (e) { toast('שגיאה בשמירת נתונים: ' + e.message, true); }
+    await recordAttempt(level, { solved: false, timeSeconds: null, disqualified: true });
   }
 
   async function handleSuccess(level) {
@@ -180,12 +202,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback ok show';
     const elapsed = Math.round((performance.now() - state.startTs) / 1000);
-    fb.innerHTML = `✅ מצוין! המעגל נסגר והזרם זורם בהצלחה (זמן פתרון: ${fmtTime(elapsed)}).`;
+    fb.innerHTML = topic.successMessage
+      ? topic.successMessage(level, elapsed)
+      : `✅ מצוין! פתרתם את השלב בהצלחה (זמן פתרון: ${fmtTime(elapsed)}).`;
 
-    // "סגירת המעגל" - רק עכשיו, לאחר תשובה נכונה, מריצים את זרימת הזרם/אמפר
-    // (מתפצל באופן פרופורציוני לזרם האמיתי בכל ענף).
+    // רק עכשיו, לאחר תשובה נכונה, מריצים את האנימציה/מצב ה"אנרגטי" של הזירה.
     const stageEl = document.getElementById('circuit-stage');
-    if (stageEl) stageEl.innerHTML = topic.renderCircuit(level, true).svg;
+    if (stageEl) stageEl.innerHTML = topic.render(level, true).svg;
 
     const lv = state.progress.levels[level.id] || { disqualifications: 0 };
     lv.solved = true;
@@ -193,14 +216,17 @@ export async function mountTopic(app, session, topic, onBack, onLogout) {
     state.progress.levels[level.id] = lv;
     state.progress.highestLevel = Math.max(state.progress.highestLevel || 0, level.id);
 
-    try { await saveLevelResult(session.studentId, topic.id, level.id, { solved: true, timeSeconds: elapsed, disqualified: false }); }
-    catch (e) { toast('שגיאה בשמירת נתונים: ' + e.message, true); }
+    await recordAttempt(level, { solved: true, timeSeconds: elapsed, disqualified: false });
 
+    // אם המשתמש/ת כבר ניווטו הלאה (למשל "חזרה למפה") בזמן שהשמירה
+    // האסינכרונית לעיל עוד רצה - המסך הזה כבר לא קיים ב-DOM, אין מה להשלים.
     const panel = document.querySelector('.qa-panel');
+    if (!panel) return;
     const nextBtn = document.createElement('div');
     nextBtn.style.marginTop = '14px';
     const hasNext = level.id < topic.totalLevels;
-    nextBtn.innerHTML = `<button id="next-level">${hasNext ? 'לשלב הבא →' : 'סיימת את הנושא! חזרה לכל הנושאים 🏁'}</button>`;
+    const finishLabel = preview ? 'סיימת את הנושא! חזרה לפאנל הניהול 🏁' : 'סיימת את הנושא! חזרה לכל הנושאים 🏁';
+    nextBtn.innerHTML = `<button id="next-level">${hasNext ? 'לשלב הבא →' : finishLabel}</button>`;
     panel.appendChild(nextBtn);
     document.getElementById('submit-answer').disabled = true;
     document.getElementById('answer-input').disabled = true;

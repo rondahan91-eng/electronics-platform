@@ -10,9 +10,9 @@ import { topbarHtml, wireLogout, toast } from './ui.js';
 import { playClick } from './game/audio.js';
 
 export async function mountHome(app, session, onLogout) {
-  const topics = curriculumForGrade(session.grade);
   let progress = {};
   let unlockedCount = 1;
+  let topics = curriculumForGrade(session.grade); // ברירת מחדל עד שמתקבל שיבוץ אמיתי מהשרת
 
   try {
     progress = await fetchMyProgress(session.studentId);
@@ -20,7 +20,10 @@ export async function mountHome(app, session, onLogout) {
   try {
     const grades = await fetchGrades();
     const g = grades.find(g => g.grade === session.grade);
-    if (g) unlockedCount = g.unlockedCount;
+    if (g) {
+      unlockedCount = g.unlockedCount;
+      topics = curriculumForGrade(session.grade, g.topicIds);
+    }
   } catch (e) { toast('שגיאה בטעינת שכבה: ' + e.message, true); }
 
   render();
@@ -42,7 +45,7 @@ export async function mountHome(app, session, onLogout) {
           <b style="font-size:16px;">${topic.title}</b>
           ${done ? '<span class="check">✅</span>' : ''}
         </div>
-        <p style="color:var(--text-1);font-size:13px;margin:6px 0;font-weight:400;">${topic.subtitle || ''}</p>
+        <p style="color:var(--ink-soft);font-size:13px;margin:6px 0;font-weight:400;">${topic.subtitle || ''}</p>
         <span class="badge">${locked ? '🔒 ייפתח בהמשך השנה' : done ? 'הושלם — ' + topic.totalLevels + '/' + topic.totalLevels : started ? `בתהליך — ${tp.highestLevel}/${topic.totalLevels}` : 'פתוח לתרגול'}</span>
       </div>`;
     }).join('') : `<div class="center-msg">אין עדיין תוכנית לימודים מוגדרת לשכבה שלך.</div>`;
@@ -52,7 +55,7 @@ export async function mountHome(app, session, onLogout) {
       <div class="map-wrap">
         <div class="glass" style="padding:20px 24px;margin-bottom:24px;">
           <h1 class="neon-title" style="font-size:22px;">📚 נושאי הלימוד שלי — כיתה ${session.grade || ''}</h1>
-          <p style="color:var(--text-1);margin:0;">לחצו על נושא פתוח כדי להתחיל לתרגל. נושאים נוספים ייפתחו בהמשך השנה, בהתאם לקצב הלמידה בכיתה.</p>
+          <p style="color:var(--ink-soft);margin:0;">לחצו על נושא פתוח כדי להתחיל לתרגל. נושאים נוספים ייפתחו בהמשך השנה, בהתאם לקצב הלמידה בכיתה.</p>
         </div>
         <div class="tier-block">
           <div class="level-grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr));">${cards}</div>

@@ -2,7 +2,7 @@
 // excelImport.js - פרשור קובץ Excel של תלמידים + חישוב פרטי התחברות לפי
 // כללים קבועים. משתמש בספריית SheetJS הגלובלית (XLSX) שנטענת ב-index.html.
 // ==========================================================================
-import { CURRICULA } from './curriculum.js';
+import { allGrades } from './curriculum.js';
 
 // כינויי כותרות אפשריים בעברית לכל שדה קנוני (נרמול: trim + הסרת גרשיים)
 const HEADER_ALIASES = {
@@ -120,7 +120,7 @@ export async function parseStudentsExcel(file, existingUsernames = []) {
       invalid.push({ row: excelRow, reason: `תאריך לידה לא תקין ("${dobRaw}"). פורמט צפוי: DD/MM/YYYY.` });
       return;
     }
-    if (!CURRICULA[grade]) {
+    if (!allGrades().includes(grade)) {
       invalid.push({ row: excelRow, reason: `שכבה לא מוכרת בתוכנית הלימודים: "${grade}".` });
       return;
     }

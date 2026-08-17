@@ -20,7 +20,7 @@ export function topbarHtml(session, subtitle) {
   return `
   <div class="topbar">
     <div class="brand"><span class="logo">⚡</span> <span class="neon-title">${CONFIG.APP_NAME}</span>
-      ${subtitle ? `<span style="color:var(--text-1);font-size:13px;font-weight:400;">— ${subtitle}</span>` : ''}
+      ${subtitle ? `<span style="color:var(--ink-soft);font-size:13px;font-weight:400;">— ${subtitle}</span>` : ''}
     </div>
     <div class="user-pill">
       <span><b>${escapeHtml(session.displayName || session.username)}</b> · ${roleLabel}</span>

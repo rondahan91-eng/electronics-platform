@@ -4,7 +4,7 @@
 // אותה שכבה בדיוק באמצעות localStorage - כדי לאפשר בדיקה מלאה בדפדפן.
 // ==========================================================================
 import { CONFIG } from './config.js';
-import { CURRICULA, allGrades } from './curriculum.js';
+import { DEFAULT_CURRICULA, ALL_TOPIC_IDS, allGrades } from './curriculum.js';
 
 const DB_KEY = 'masa-hazerem-devdb';
 
@@ -37,7 +37,10 @@ function delay(ms = 220) { return new Promise(r => setTimeout(r, ms)); }
 
 function ensureGradesSeeded(db) {
   if (!db.grades) db.grades = {};
-  allGrades().forEach(g => { if (!db.grades[g]) db.grades[g] = { unlockedCount: 1 }; });
+  allGrades().forEach(g => {
+    if (!db.grades[g]) db.grades[g] = { unlockedCount: 1, topicIds: [...(DEFAULT_CURRICULA[g] || [])] };
+    if (!db.grades[g].topicIds) db.grades[g].topicIds = [...(DEFAULT_CURRICULA[g] || [])]; // מיגרציה לנתונים ישנים
+  });
 }
 
 async function ensureSeeded() {
@@ -52,9 +55,9 @@ async function ensureSeeded() {
     basic: {
       highestLevel: 3,
       levels: {
-        1: { solved: true, timeSeconds: 46, disqualifications: 0 },
-        2: { solved: true, timeSeconds: 91, disqualifications: 1 },
-        3: { solved: true, timeSeconds: 138, disqualifications: 2 },
+        1: { solved: true, timeSeconds: 46, disqualifications: 0, attempts: 1 },
+        2: { solved: true, timeSeconds: 91, disqualifications: 1, attempts: 3 },
+        3: { solved: true, timeSeconds: 138, disqualifications: 2, attempts: 4 },
       },
     },
   };
@@ -109,7 +112,8 @@ async function callLocal(action, payload) {
     if (!db.progress[studentId]) db.progress[studentId] = {};
     if (!db.progress[studentId][topicId]) db.progress[studentId][topicId] = { highestLevel: 0, levels: {} };
     const prog = db.progress[studentId][topicId];
-    const lv = prog.levels[levelId] || { solved: false, timeSeconds: null, disqualifications: 0 };
+    const lv = prog.levels[levelId] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
+    lv.attempts = (lv.attempts || 0) + 1;
     if (disqualified) lv.disqualifications = (lv.disqualifications || 0) + 1;
     if (solved) {
       lv.solved = true;
@@ -127,16 +131,38 @@ async function callLocal(action, payload) {
   }
 
   if (action === 'fetchGrades') {
-    return allGrades().map(g => ({ grade: g, unlockedCount: db.grades[g]?.unlockedCount || 1 }));
+    return allGrades().map(g => ({
+      grade: g,
+      unlockedCount: db.grades[g]?.unlockedCount || 1,
+      topicIds: db.grades[g]?.topicIds || [],
+    }));
   }
 
   if (action === 'advanceGradeTopic') {
     const { grade } = payload;
-    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1 };
-    const max = (CURRICULA[grade] || []).length;
+    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [...(DEFAULT_CURRICULA[grade] || [])] };
+    const max = db.grades[grade].topicIds.length;
     db.grades[grade].unlockedCount = Math.min(db.grades[grade].unlockedCount + 1, max);
     saveDB(db);
     return { unlockedCount: db.grades[grade].unlockedCount };
+  }
+
+  if (action === 'assignTopicToGrade') {
+    const { grade, topicId } = payload;
+    if (!grade || !ALL_TOPIC_IDS.includes(topicId)) throw new Error('שכבה או נושא לא תקינים');
+    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [] };
+    if (!db.grades[grade].topicIds.includes(topicId)) db.grades[grade].topicIds.push(topicId);
+    saveDB(db);
+    return { topicIds: db.grades[grade].topicIds };
+  }
+
+  if (action === 'removeTopicFromGrade') {
+    const { grade, topicId } = payload;
+    if (!grade || !db.grades[grade]) throw new Error('שכבה לא נמצאה');
+    db.grades[grade].topicIds = db.grades[grade].topicIds.filter(id => id !== topicId);
+    db.grades[grade].unlockedCount = Math.min(db.grades[grade].unlockedCount, db.grades[grade].topicIds.length);
+    saveDB(db);
+    return { topicIds: db.grades[grade].topicIds, unlockedCount: db.grades[grade].unlockedCount };
   }
 
   throw new Error('פעולה לא מוכרת: ' + action);
@@ -149,6 +175,7 @@ function summarizeStudent(db, user, topicId) {
     ? Math.round(solvedLevels.reduce((s, l) => s + l.timeSeconds, 0) / solvedLevels.length)
     : null;
   const disqualifications = Object.values(topicProg.levels || {}).reduce((s, l) => s + (l.disqualifications || 0), 0);
+  const attempts = Object.values(topicProg.levels || {}).reduce((s, l) => s + (l.attempts || 0), 0);
   return {
     studentId: user.studentId,
     username: user.username,
@@ -157,6 +184,7 @@ function summarizeStudent(db, user, topicId) {
     highestLevel: topicProg.highestLevel || 0,
     avgTimeSeconds: avgTime,
     disqualifications,
+    attempts,
   };
 }
 
@@ -188,5 +216,11 @@ export async function fetchGrades() {
 }
 export async function advanceGradeTopic(grade) {
   return dispatch('advanceGradeTopic', { grade });
+}
+export async function assignTopicToGrade(grade, topicId) {
+  return dispatch('assignTopicToGrade', { grade, topicId });
+}
+export async function removeTopicFromGrade(grade, topicId) {
+  return dispatch('removeTopicFromGrade', { grade, topicId });
 }
 export function isDevMode() { return !CONFIG.API_URL; }
