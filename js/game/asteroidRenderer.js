@@ -20,14 +20,14 @@ function toPx(xCm, yCm) { return { x: SHIP_X + xCm * SCALE, y: SHIP_Y - yCm * SC
 const JET_DEFS = `
   <linearGradient id="jetGradR" x1="0" y1="0" x2="1" y2="0">
     <stop offset="0%" stop-color="#eafcff" stop-opacity="0.95"/>
-    <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0"/>
+    <stop offset="100%" stop-color="var(--px-brand-bright)" stop-opacity="0"/>
   </linearGradient>
   <linearGradient id="jetGradL" x1="1" y1="0" x2="0" y2="0">
     <stop offset="0%" stop-color="#eafcff" stop-opacity="0.95"/>
-    <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0"/>
+    <stop offset="100%" stop-color="var(--px-brand-bright)" stop-opacity="0"/>
   </linearGradient>`;
 
-function chargeColor(q) { return q > 0 ? 'var(--red)' : 'var(--cyan)'; }
+function chargeColor(q) { return q > 0 ? 'var(--px-coral)' : 'var(--px-brand-bright)'; }
 
 /**
  * צד יציאת הסילון נגזר *ישירות* מסימן הכוח שהוזן (או, בהצלחה, מסימן
@@ -119,7 +119,7 @@ function distanceRuler(asteroid) {
   // במיקומים שרירותיים, המרחקים המדויקים כבר כתובים בטקסט השאלה.
   const p = toPx(asteroid.x, asteroid.y);
   return `
-    <line x1="${SHIP_X + 24}" y1="${SHIP_Y}" x2="${p.x - 34}" y2="${p.y}" stroke="var(--text-1)" stroke-width="1.5" stroke-dasharray="3,5" opacity="0.3"/>
+    <line x1="${SHIP_X + 24}" y1="${SHIP_Y}" x2="${p.x - 34}" y2="${p.y}" stroke="var(--px-ink-inverse-soft)" stroke-width="1.5" stroke-dasharray="3,5" opacity="0.3"/>
     ${labeledText((SHIP_X + p.x) / 2, SHIP_Y - 20, `r = ${asteroid.x} ס"מ`, 'comp-val')}
   `;
 }
@@ -127,15 +127,15 @@ function distanceRuler(asteroid) {
 function verticalPathLine() {
   // מסלול הטיסה האמיתי של הספינה - כלפי מעלה. האסטרואיד מפעיל כוח *צדדי*
   // עליה, וזה בדיוק מה שהמנועים צריכים לאזן כדי שהיא לא תסטה ממסלול זה.
-  return `<line x1="${SHIP_X}" y1="${SHIP_Y - 22}" x2="${SHIP_X}" y2="55" stroke="var(--cyan)" stroke-width="2" stroke-dasharray="5,7" opacity="0.5"/>`;
+  return `<line x1="${SHIP_X}" y1="${SHIP_Y - 22}" x2="${SHIP_X}" y2="55" stroke="var(--px-brand-bright)" stroke-width="2" stroke-dasharray="5,7" opacity="0.5"/>`;
 }
 
 function stopwatchGlyph() {
   // סופר *מעלה* את זמן הפעילות בתרגיל הנוכחי - אין כאן שום "תוצאה" אם
   // הזמן מתארך, זה רק מדד מידע/אתגר אישי (כמו "זמן פתרון") ולא דדליין.
   return `<g id="stopwatch-group">
-    <rect x="${W / 2 - 54}" y="10" width="108" height="36" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--line)"/>
-    <text id="stopwatch-text" x="${W / 2}" y="35" text-anchor="middle" font-size="18" font-weight="900" fill="var(--cyan)">⏱ 0:00</text>
+    <rect x="${W / 2 - 54}" y="10" width="108" height="36" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--px-schem-border)"/>
+    <text id="stopwatch-text" x="${W / 2}" y="35" text-anchor="middle" font-size="18" font-weight="900" fill="var(--px-brand-bright)">⏱ 0:00</text>
   </g>`;
 }
 
@@ -154,14 +154,14 @@ function balanceGaugeGlyph(level, value) {
   const normalized = Math.max(-1, Math.min(1, (value - q.answer) / denom));
   const tolerance = Math.max(Math.abs(q.trueForceN) * CONFIG.ANSWER_TOLERANCE_PCT, 1e-9);
   let color;
-  if (Math.abs(value - q.answer) <= tolerance) color = 'var(--green)';
-  else if (Math.abs(value) > q.crashThreshold) color = 'var(--red)';
-  else color = 'var(--amber)';
+  if (Math.abs(value - q.answer) <= tolerance) color = 'var(--px-brand-bright)';
+  else if (Math.abs(value) > q.crashThreshold) color = 'var(--px-coral)';
+  else color = 'var(--px-amber)';
   const gy = SHIP_Y + 100;
   return `<g id="balance-gauge" transform="translate(${SHIP_X},${gy})">
     ${labeledText(0, -20, 'מד איזון כוחות', 'comp-val')}
-    <rect x="-80" y="-9" width="160" height="18" rx="9" fill="#080b16" fill-opacity="0.78" stroke="var(--line)"/>
-    <line x1="0" y1="-13" x2="0" y2="13" stroke="var(--text-1)" stroke-width="1.5" opacity="0.6"/>
+    <rect x="-80" y="-9" width="160" height="18" rx="9" fill="#080b16" fill-opacity="0.78" stroke="var(--px-schem-border)"/>
+    <line x1="0" y1="-13" x2="0" y2="13" stroke="var(--px-ink-inverse-soft)" stroke-width="1.5" opacity="0.6"/>
     <circle cx="${(normalized * 72).toFixed(1)}" cy="0" r="9" fill="${color}" filter="url(#glow)"/>
   </g>`;
 }
@@ -210,7 +210,7 @@ export function renderAsteroid(level, energized = false) {
   // (אותה נוסחה בדיוק כמו בתשובה שגויה - ראו flameSideFor), הספינה נשארת
   // במקומה (רק רעד התייצבות אנכי), ומד האיזון נעול במרכז בירוק.
   const svg = buildScene(level, {
-    flame: { side: flameSideFor(level.question.answer), color: 'var(--green)' },
+    flame: { side: flameSideFor(level.question.answer), color: 'var(--px-brand-bright)' },
     gaugeValue: level.question.answer,
     wobble: true,
   });
@@ -234,7 +234,7 @@ export function animateAsteroidIncorrect(stageEl, level, result) {
   const residual = val - q.trueForceN; // חיובי = שקול לעבר האסטרואיד, שלילי = הרחק ממנו
   const dx = Math.max(-40, Math.min(40, (residual / (Math.abs(q.trueForceN) || 1)) * 30));
   const wrongSign = val !== 0 && Math.sign(val) !== Math.sign(q.answer);
-  const color = wrongSign ? 'var(--pink)' : 'var(--amber)';
+  const color = wrongSign ? 'var(--px-coral)' : 'var(--px-amber)';
 
   stageEl.innerHTML = buildScene(level, {
     dx,

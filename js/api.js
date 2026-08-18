@@ -4,7 +4,8 @@
 // אותה שכבה בדיוק באמצעות localStorage - כדי לאפשר בדיקה מלאה בדפדפן.
 // ==========================================================================
 import { CONFIG } from './config.js';
-import { DEFAULT_CURRICULA, ALL_TOPIC_IDS, allGrades } from './curriculum.js';
+import { DEFAULT_CURRICULA, allGrades } from './curriculum.js';
+import { DEFAULT_REVEALED } from './syllabus.js';
 
 const DB_KEY = 'masa-hazerem-devdb';
 
@@ -40,13 +41,17 @@ function ensureGradesSeeded(db) {
   allGrades().forEach(g => {
     if (!db.grades[g]) db.grades[g] = { unlockedCount: 1, topicIds: [...(DEFAULT_CURRICULA[g] || [])] };
     if (!db.grades[g].topicIds) db.grades[g].topicIds = [...(DEFAULT_CURRICULA[g] || [])]; // מיגרציה לנתונים ישנים
+    // "חשיפת פרקים" - שכבת המידע החדשה (syllabus.js), חיה *לצד* המנגנון
+    // הישן (unlockedCount/topicIds) בזמן המעבר בין העיצובים; המנגנון
+    // הישן יוסר אחרי שלבים 4/6 (שם home.js/dashboard.js עוברים אליה).
+    if (!db.grades[g].revealed) db.grades[g].revealed = [...DEFAULT_REVEALED];
   });
 }
 
 async function ensureSeeded() {
   let db = loadDB();
-  if (db) { ensureGradesSeeded(db); return db; }
-  db = { users: [], progress: {}, grades: {} };
+  if (db) { ensureGradesSeeded(db); if (!db.reports) db.reports = []; return db; }
+  db = { users: [], progress: {}, grades: {}, reports: [] };
   const adminHash = await sha256Hex('admin123');
   const demoHash = await sha256Hex('demo1234');
   db.users.push({ studentId: 'admin', username: 'admin', passHash: adminHash, role: 'admin', displayName: 'מורה ראשי', grade: null });
@@ -76,7 +81,21 @@ async function callLocal(action, payload) {
     if (!user) throw new Error('שם משתמש או סיסמה שגויים');
     const hash = await sha256Hex(password);
     if (hash !== user.passHash) throw new Error('שם משתמש או סיסמה שגויים');
-    return { studentId: user.studentId, username: user.username, role: user.role, displayName: user.displayName, grade: user.grade || null };
+    // רצף ימי כניסה - מתעדכן פעם ביום, לא בכל בדיקה. מבוסס על תאריך
+    // התחברות אמיתי (לא נתון מדומה) - נשמר לכל תלמיד/ה בנפרד.
+    if (user.role === 'student') {
+      const today = new Date().toISOString().slice(0, 10);
+      if (user.lastActiveDate !== today) {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        user.streakDays = user.lastActiveDate === yesterday ? (user.streakDays || 0) + 1 : 1;
+        user.lastActiveDate = today;
+        saveDB(db);
+      }
+    }
+    return {
+      studentId: user.studentId, username: user.username, role: user.role,
+      displayName: user.displayName, grade: user.grade || null, streakDays: user.streakDays || 0,
+    };
   }
 
   if (action === 'fetchClassProgress') {
@@ -135,34 +154,66 @@ async function callLocal(action, payload) {
       grade: g,
       unlockedCount: db.grades[g]?.unlockedCount || 1,
       topicIds: db.grades[g]?.topicIds || [],
+      revealed: db.grades[g]?.revealed || [],
     }));
   }
 
-  if (action === 'advanceGradeTopic') {
-    const { grade } = payload;
-    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [...(DEFAULT_CURRICULA[grade] || [])] };
-    const max = db.grades[grade].topicIds.length;
-    db.grades[grade].unlockedCount = Math.min(db.grades[grade].unlockedCount + 1, max);
+  if (action === 'revealChapter') {
+    const { grade, key } = payload;
+    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [], revealed: [] };
+    if (!db.grades[grade].revealed.includes(key)) db.grades[grade].revealed.push(key);
     saveDB(db);
-    return { unlockedCount: db.grades[grade].unlockedCount };
+    return { revealed: db.grades[grade].revealed };
   }
 
-  if (action === 'assignTopicToGrade') {
-    const { grade, topicId } = payload;
-    if (!grade || !ALL_TOPIC_IDS.includes(topicId)) throw new Error('שכבה או נושא לא תקינים');
-    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [] };
-    if (!db.grades[grade].topicIds.includes(topicId)) db.grades[grade].topicIds.push(topicId);
+  if (action === 'hideChapter') {
+    const { grade, key } = payload;
+    if (!db.grades[grade]) db.grades[grade] = { unlockedCount: 1, topicIds: [], revealed: [] };
+    db.grades[grade].revealed = db.grades[grade].revealed.filter(k => k !== key);
     saveDB(db);
-    return { topicIds: db.grades[grade].topicIds };
+    return { revealed: db.grades[grade].revealed };
   }
 
-  if (action === 'removeTopicFromGrade') {
-    const { grade, topicId } = payload;
-    if (!grade || !db.grades[grade]) throw new Error('שכבה לא נמצאה');
-    db.grades[grade].topicIds = db.grades[grade].topicIds.filter(id => id !== topicId);
-    db.grades[grade].unlockedCount = Math.min(db.grades[grade].unlockedCount, db.grades[grade].topicIds.length);
+  if (action === 'submitReport') {
+    const { studentId, studentName, grade, screen, text } = payload;
+    if (!text || !text.trim()) throw new Error('נא לכתוב תיאור קצר של התקלה');
+    const report = {
+      id: 'R-' + Date.now().toString(36),
+      studentId, studentName: studentName || 'לא ידוע', grade: grade || '—',
+      screen, text: text.trim(), open: true, createdAt: new Date().toISOString(),
+    };
+    db.reports.unshift(report);
     saveDB(db);
-    return { topicIds: db.grades[grade].topicIds, unlockedCount: db.grades[grade].unlockedCount };
+    return report;
+  }
+
+  if (action === 'fetchReports') {
+    return db.reports.slice();
+  }
+
+  if (action === 'toggleReportOpen') {
+    const { id } = payload;
+    const report = db.reports.find(r => r.id === id);
+    if (!report) throw new Error('דיווח לא נמצא');
+    report.open = !report.open;
+    saveDB(db);
+    return { open: report.open };
+  }
+
+  if (action === 'fetchTopicLevelStats') {
+    const { topicId } = payload;
+    const byLevel = {};
+    Object.values(db.progress).forEach(byTopic => {
+      const prog = byTopic[topicId];
+      if (!prog || !prog.levels) return;
+      Object.entries(prog.levels).forEach(([levelId, lv]) => {
+        const id = Number(levelId);
+        if (!byLevel[id]) byLevel[id] = { levelId: id, dq: 0, attempts: 0 };
+        byLevel[id].dq += lv.disqualifications || 0;
+        byLevel[id].attempts += lv.attempts || 0;
+      });
+    });
+    return Object.values(byLevel).sort((a, b) => a.levelId - b.levelId);
   }
 
   throw new Error('פעולה לא מוכרת: ' + action);
@@ -185,6 +236,7 @@ function summarizeStudent(db, user, topicId) {
     avgTimeSeconds: avgTime,
     disqualifications,
     attempts,
+    lastActiveDate: user.lastActiveDate || null,
   };
 }
 
@@ -214,13 +266,22 @@ export async function fetchMyProgress(studentId) {
 export async function fetchGrades() {
   return dispatch('fetchGrades', {});
 }
-export async function advanceGradeTopic(grade) {
-  return dispatch('advanceGradeTopic', { grade });
+export async function fetchTopicLevelStats(topicId) {
+  return dispatch('fetchTopicLevelStats', { topicId });
 }
-export async function assignTopicToGrade(grade, topicId) {
-  return dispatch('assignTopicToGrade', { grade, topicId });
+export async function submitReport(report) {
+  return dispatch('submitReport', report);
 }
-export async function removeTopicFromGrade(grade, topicId) {
-  return dispatch('removeTopicFromGrade', { grade, topicId });
+export async function fetchReports() {
+  return dispatch('fetchReports', {});
+}
+export async function toggleReportOpen(id) {
+  return dispatch('toggleReportOpen', { id });
+}
+export async function revealChapter(grade, key) {
+  return dispatch('revealChapter', { grade, key });
+}
+export async function hideChapter(grade, key) {
+  return dispatch('hideChapter', { grade, key });
 }
 export function isDevMode() { return !CONFIG.API_URL; }

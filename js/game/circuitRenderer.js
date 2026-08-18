@@ -59,7 +59,7 @@ function flowDots(pathId, currentAbs, maxCurrent, color, opts = {}) {
     const r = 6 + ratio * 9;
     out += `<g filter="url(#dotglow)">
       <animateMotion dur="${dur}s" repeatCount="indefinite"><mpath href="#${pathId}"/></animateMotion>
-      <circle r="${r.toFixed(1)}" fill="var(--cyan)"/>
+      <circle r="${r.toFixed(1)}" fill="var(--px-brand-bright)"/>
       <text text-anchor="middle" dy="4" font-size="${Math.max(9, r).toFixed(0)}" fill="#05060a" font-weight="900">A</text>
     </g>`;
   }
@@ -190,15 +190,15 @@ function sourceSymbol(x, topY, isAC) {
   if (isAC) {
     const cy = topY + SRC_LEAD / 2;
     return `<g transform="translate(${x},${cy})">
-      <circle cx="0" cy="0" r="20" fill="none" stroke="var(--pink)" stroke-width="4" filter="url(#glow)"/>
-      <path d="M-12,0 q6,-14 12,0 q6,14 12,0" fill="none" stroke="var(--pink)" stroke-width="3"/>
+      <circle cx="0" cy="0" r="20" fill="none" stroke="var(--px-coral)" stroke-width="4" filter="url(#glow)"/>
+      <path d="M-12,0 q6,-14 12,0 q6,14 12,0" fill="none" stroke="var(--px-coral)" stroke-width="3"/>
     </g>`;
   }
   return `<g transform="translate(${x},${topY})">
-    <line x1="0" y1="0" x2="0" y2="16" stroke="var(--amber)" stroke-width="6"/>
-    <line x1="-14" y1="16" x2="14" y2="16" stroke="var(--amber)" stroke-width="6"/>
-    <line x1="-7" y1="28" x2="7" y2="28" stroke="var(--cyan)" stroke-width="3"/>
-    <line x1="0" y1="28" x2="0" y2="${SRC_LEAD}" stroke="var(--cyan)" stroke-width="6"/>
+    <line x1="0" y1="0" x2="0" y2="16" stroke="var(--px-amber)" stroke-width="6"/>
+    <line x1="-14" y1="16" x2="14" y2="16" stroke="var(--px-amber)" stroke-width="6"/>
+    <line x1="-7" y1="28" x2="7" y2="28" stroke="var(--px-brand-bright)" stroke-width="3"/>
+    <line x1="0" y1="28" x2="0" y2="${SRC_LEAD}" stroke="var(--px-brand-bright)" stroke-width="6"/>
   </g>`;
 }
 
@@ -254,23 +254,23 @@ function renderOpamp(level) {
       ${GLOW_FILTERS}
     </defs>
     <text x="40" y="${inverting ? 90 : 170}" text-anchor="middle" class="comp-val">Vin=${vin}V</text>
-    <line x1="20" y1="${inverting ? 100 : 180}" x2="140" y2="${inverting ? 100 : 180}" stroke="var(--cyan)" stroke-width="4" filter="url(#glow)"/>
+    <line x1="20" y1="${inverting ? 100 : 180}" x2="140" y2="${inverting ? 100 : 180}" stroke="var(--px-brand-bright)" stroke-width="4" filter="url(#glow)"/>
     <g transform="translate(140,${inverting ? 100 : 180})">
-      <polyline points="0,0 60,0" fill="none" stroke="var(--amber)" stroke-width="5" stroke-linejoin="round"
+      <polyline points="0,0 60,0" fill="none" stroke="var(--px-amber)" stroke-width="5" stroke-linejoin="round"
         transform="translate(0,-10)"/>
       <text x="30" y="-16" text-anchor="middle" class="comp-label">Rin=${rin}Ω</text>
     </g>
-    <line x1="200" y1="${inverting ? 100 : 180}" x2="260" y2="130" stroke="var(--cyan)" stroke-width="4" filter="url(#glow)"/>
-    <polygon points="260,60 260,200 400,130" fill="rgba(124,77,255,.15)" stroke="var(--violet)" stroke-width="3" filter="url(#glow)"/>
+    <line x1="200" y1="${inverting ? 100 : 180}" x2="260" y2="130" stroke="var(--px-brand-bright)" stroke-width="4" filter="url(#glow)"/>
+    <polygon points="260,60 260,200 400,130" fill="rgba(124,77,255,.15)" stroke="var(--px-lilac)" stroke-width="3" filter="url(#glow)"/>
     <text x="272" y="90" class="comp-label">${inverting ? '−' : '+'}</text>
     <text x="272" y="180" class="comp-label">${inverting ? '+' : '−'}</text>
-    <line x1="230" y1="${inverting ? 200 : 60}" x2="260" y2="${inverting ? 190 : 70}" stroke="var(--text-1)" stroke-width="3"/>
+    <line x1="230" y1="${inverting ? 200 : 60}" x2="260" y2="${inverting ? 190 : 70}" stroke="var(--px-ink-inverse-soft)" stroke-width="3"/>
     <text x="220" y="${inverting ? 216 : 50}" class="comp-val" text-anchor="middle">GND</text>
-    <line x1="400" y1="130" x2="520" y2="130" stroke="var(--red)" stroke-width="4" filter="url(#glow)"/>
+    <line x1="400" y1="130" x2="520" y2="130" stroke="var(--px-coral)" stroke-width="4" filter="url(#glow)"/>
     <text x="560" y="126" text-anchor="middle" class="comp-val">Vout=?</text>
-    <path d="M300,130 L300,${inverting ? 40 : 220} L440,${inverting ? 40 : 220} L440,130" fill="none" stroke="var(--pink)" stroke-width="3" stroke-dasharray="5,4"/>
+    <path d="M300,130 L300,${inverting ? 40 : 220} L440,${inverting ? 40 : 220} L440,130" fill="none" stroke="var(--px-coral)" stroke-width="3" stroke-dasharray="5,4"/>
     <g transform="translate(340,${inverting ? 24 : 204})">
-      <polyline points="0,0 60,0" fill="none" stroke="var(--pink)" stroke-width="5" stroke-linejoin="round" transform="translate(0,-10)"/>
+      <polyline points="0,0 60,0" fill="none" stroke="var(--px-coral)" stroke-width="5" stroke-linejoin="round" transform="translate(0,-10)"/>
       <text x="30" y="-16" text-anchor="middle" class="comp-label">Rf=${rf}Ω</text>
     </g>
   </svg>`;

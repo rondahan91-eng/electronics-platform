@@ -39,8 +39,8 @@ function bulbSymbol(R, vMin, glow) {
   const isOn = glow === 'on';
   const isOff = glow === 'off';
   const fill = isOn ? '#fff3c4' : (isOff ? '#3a3f52' : '#1b2033');
-  const stroke = isOff ? 'var(--red)' : 'var(--line)';
-  const filamentColor = isOn ? '#7a5b00' : 'var(--text-1)';
+  const stroke = isOff ? 'var(--px-coral)' : 'var(--px-schem-border)';
+  const filamentColor = isOn ? '#7a5b00' : 'var(--px-ink-inverse-soft)';
   return `<g id="bulb-symbol">
     <circle cx="${BULB_X}" cy="${MID_Y}" r="${rad}" fill="${fill}" stroke="${stroke}" stroke-width="2" ${isOn ? 'filter="url(#glow)"' : ''}/>
     <line x1="${BULB_X - 12}" y1="${MID_Y - 12}" x2="${BULB_X + 12}" y2="${MID_Y + 12}" stroke="${filamentColor}" stroke-width="2"/>
@@ -54,7 +54,7 @@ function bulbSymbol(R, vMin, glow) {
 function voltmeterGlyph(value, unit, color) {
   if (value == null) return '';
   return `<g id="voltmeter">
-    <rect x="${W / 2 - 62}" y="30" width="124" height="40" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--line)"/>
+    <rect x="${W / 2 - 62}" y="30" width="124" height="40" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--px-schem-border)"/>
     <text x="${W / 2}" y="56" text-anchor="middle" font-size="19" font-weight="900" fill="${color}">V = ${value}${unit}</text>
   </g>`;
 }
@@ -74,7 +74,7 @@ function burstEffect(x, y, color) {
 
 function buildScene(level, opts = {}) {
   const { emf, r, R, vMin } = level.world;
-  const { voltmeterValue = null, voltmeterColor = 'var(--cyan)', bulbState = null, burst = false } = opts;
+  const { voltmeterValue = null, voltmeterColor = 'var(--px-brand-bright)', bulbState = null, burst = false } = opts;
   const out = [
     `<rect x="0" y="0" width="${W}" height="${H}" fill="none"/>`,
     wireLoop(),
@@ -95,7 +95,7 @@ export function renderVoltageSource(level, energized = false) {
   if (!energized) return { svg: buildScene(level), width: W, height: H };
   const q = level.question;
   const bulbState = q.answer >= q.vMin ? 'on' : 'off';
-  const svg = buildScene(level, { voltmeterValue: q.answer, voltmeterColor: 'var(--green)', bulbState });
+  const svg = buildScene(level, { voltmeterValue: q.answer, voltmeterColor: 'var(--px-brand-bright)', bulbState });
   return { svg, width: W, height: H };
 }
 
@@ -107,13 +107,13 @@ export function animateVoltageIncorrect(stageEl, level, result) {
   const val = result.value;
   const bulbState = val >= q.vMin ? 'on' : 'off';
   const displayVal = Math.round(val * 1000) / 1000;
-  stageEl.innerHTML = buildScene(level, { voltmeterValue: displayVal, voltmeterColor: 'var(--amber)', bulbState });
+  stageEl.innerHTML = buildScene(level, { voltmeterValue: displayVal, voltmeterColor: 'var(--px-amber)', bulbState });
   stageEl.classList.remove('shake'); void stageEl.offsetWidth; stageEl.classList.add('shake');
 }
 
 /** פסילה - "התחממות יתר" במקור: פיצוץ במיקום הסוללה, הנורה כבויה. */
 export function triggerVoltageDisqualifyAnimation(stageEl, level, result) {
   const displayVal = Math.round(result.value * 1000) / 1000;
-  stageEl.innerHTML = buildScene(level, { voltmeterValue: displayVal, voltmeterColor: 'var(--red)', bulbState: 'off', burst: true });
+  stageEl.innerHTML = buildScene(level, { voltmeterValue: displayVal, voltmeterColor: 'var(--px-coral)', bulbState: 'off', burst: true });
   stageEl.classList.remove('shake'); void stageEl.offsetWidth; stageEl.classList.add('shake');
 }

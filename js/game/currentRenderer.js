@@ -55,7 +55,7 @@ function readoutGlyph(value, unit, color, symbol = 'I', dirText = null) {
   const label = dirText ? `${symbol} = ${value}${unit}  (${dirText})` : `${symbol} = ${value}${unit}`;
   const boxW = dirText ? 200 : 130;
   return `<g id="readout">
-    <rect x="${W / 2 - boxW / 2}" y="26" width="${boxW}" height="40" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--line)"/>
+    <rect x="${W / 2 - boxW / 2}" y="26" width="${boxW}" height="40" rx="10" fill="#080b16" fill-opacity="0.86" stroke="var(--px-schem-border)"/>
     <text x="${W / 2}" y="52" text-anchor="middle" font-size="${dirText ? 16 : 19}" font-weight="900" fill="${color}">${label}</text>
   </g>`;
 }
@@ -66,12 +66,12 @@ const X1 = 70, X2 = 570;
 const XS_X = 340; // מיקום חתך הרוחב המסומן על התיל
 
 function wireBase(burnt) {
-  const color = burnt ? 'var(--red)' : 'var(--line)';
+  const color = burnt ? 'var(--px-coral)' : 'var(--px-schem-border)';
   return `<line x1="${X1}" y1="${WIRE_Y}" x2="${X2}" y2="${WIRE_Y}" stroke="${color}" stroke-width="6" stroke-linecap="round"/>`;
 }
 
 function crossSectionMark(burnt) {
-  const color = burnt ? 'var(--red)' : 'var(--text-1)';
+  const color = burnt ? 'var(--px-coral)' : 'var(--px-ink-inverse-soft)';
   return `
     <line x1="${XS_X}" y1="${WIRE_Y - 44}" x2="${XS_X}" y2="${WIRE_Y + 44}" stroke="${color}" stroke-width="2" stroke-dasharray="5,5"/>
     ${labeledText(XS_X, WIRE_Y - 56, 'חתך A', 'comp-label')}
@@ -95,7 +95,7 @@ function givenLabels(level) {
 function buildScene(level, opts = {}) {
   const { I } = level.world;
   const find = level.question.find;
-  const { readoutValue = null, readoutColor = 'var(--cyan)', flowVal = null, burnt = false } = opts;
+  const { readoutValue = null, readoutColor = 'var(--px-brand-bright)', flowVal = null, burnt = false } = opts;
   const out = [
     `<rect x="0" y="0" width="${W}" height="${H}" fill="none"/>`,
     wireBase(burnt),
@@ -106,7 +106,7 @@ function buildScene(level, opts = {}) {
     if (find === 'Q' || find === 't') {
       // I הוא נתון (לא תשובה) בשני המקרים - הזרימה גלויה תמיד בקצב הקבוע
       // שלו, ולא מושפעת מהערך שהתלמיד/ה מזינים (Q או t, לא קצב).
-      out.push(chargeStream(X1 + 14, X2 - 14, WIRE_Y, I, Math.abs(I), 'var(--cyan)'));
+      out.push(chargeStream(X1 + 14, X2 - 14, WIRE_Y, I, Math.abs(I), 'var(--px-brand-bright)'));
     } else if (flowVal != null) {
       out.push(chargeStream(X1 + 14, X2 - 14, WIRE_Y, flowVal, Math.abs(level.question.answer), readoutColor));
     }
@@ -128,7 +128,7 @@ const DIR_X1 = 110, DIR_X2 = 530;
 const DIR_ELECTRON_Y = DIR_WIRE_Y - 60;
 
 function directionWireBase(burnt) {
-  const color = burnt ? 'var(--red)' : 'var(--line)';
+  const color = burnt ? 'var(--px-coral)' : 'var(--px-schem-border)';
   return `<line x1="${DIR_X1}" y1="${DIR_WIRE_Y}" x2="${DIR_X2}" y2="${DIR_WIRE_Y}" stroke="${color}" stroke-width="6" stroke-linecap="round"/>`;
 }
 
@@ -154,7 +154,7 @@ function electronStream(x1, x2, y, dir, color) {
 
 function buildDirectionScene(level, opts = {}) {
   const { Q, t, context, electronDir } = level.world;
-  const { readoutValue = null, readoutColor = 'var(--cyan)', flowVal = null, dirText = null, burnt = false } = opts;
+  const { readoutValue = null, readoutColor = 'var(--px-brand-bright)', flowVal = null, dirText = null, burnt = false } = opts;
   const out = [
     `<rect x="0" y="0" width="${W}" height="${H}" fill="none"/>`,
     directionWireBase(burnt),
@@ -164,7 +164,7 @@ function buildDirectionScene(level, opts = {}) {
     labeledText(DIR_X1 + 6, DIR_WIRE_Y + 70, `t = ${t} שנ'`, 'comp-val', { anchor: 'start' }),
     labeledText(DIR_X2 - 6, DIR_WIRE_Y + 50, context, 'comp-val', { anchor: 'end', fontSize: 10 }),
   ];
-  if (!burnt) out.push(electronStream(DIR_X1 + 20, DIR_X2 - 20, DIR_ELECTRON_Y, electronDir, 'var(--violet)'));
+  if (!burnt) out.push(electronStream(DIR_X1 + 20, DIR_X2 - 20, DIR_ELECTRON_Y, electronDir, 'var(--px-ink-inverse-soft)'));
   if (flowVal != null && !burnt) {
     out.push(chargeStream(DIR_X1 + 14, DIR_X2 - 14, DIR_WIRE_Y, flowVal, Math.abs(level.question.answer), readoutColor, flowVal < 0));
   }
@@ -184,18 +184,18 @@ export function renderCurrent(level, energized = false) {
   if (level.world.type === 'direction') {
     if (!energized) return { svg: buildDirectionScene(level), width: W, height: H };
     const svg = buildDirectionScene(level, {
-      readoutValue: Math.abs(q.answer), readoutColor: 'var(--green)',
+      readoutValue: Math.abs(q.answer), readoutColor: 'var(--px-brand-bright)',
       flowVal: q.answer, dirText: dirArrowText(q.currentDir),
     });
     return { svg, width: W, height: H };
   }
   if (q.find === 'Q' || q.find === 't') {
     if (!energized) return { svg: buildScene(level), width: W, height: H };
-    const svg = buildScene(level, { readoutValue: q.answer, readoutColor: 'var(--green)' });
+    const svg = buildScene(level, { readoutValue: q.answer, readoutColor: 'var(--px-brand-bright)' });
     return { svg, width: W, height: H };
   }
   if (!energized) return { svg: buildScene(level), width: W, height: H };
-  const svg = buildScene(level, { readoutValue: q.answer, readoutColor: 'var(--green)', flowVal: q.answer });
+  const svg = buildScene(level, { readoutValue: q.answer, readoutColor: 'var(--px-brand-bright)', flowVal: q.answer });
   return { svg, width: W, height: H };
 }
 
@@ -209,13 +209,13 @@ export function animateCurrentIncorrect(stageEl, level, result) {
   if (level.world.type === 'direction') {
     const displayVal = Math.round(Math.abs(val) * 1000) / 1000;
     const dirText = dirArrowText(val < 0 ? 'BtoA' : 'AtoB');
-    stageEl.innerHTML = buildDirectionScene(level, { readoutValue: displayVal, readoutColor: 'var(--amber)', flowVal: val, dirText });
+    stageEl.innerHTML = buildDirectionScene(level, { readoutValue: displayVal, readoutColor: 'var(--px-amber)', flowVal: val, dirText });
   } else if (q.find === 'Q' || q.find === 't') {
     const displayVal = Math.round(val * 1000) / 1000;
-    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--amber)' });
+    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--px-amber)' });
   } else {
     const displayVal = Math.round(Math.abs(val) * 1000) / 1000;
-    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--amber)', flowVal: val });
+    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--px-amber)', flowVal: val });
   }
   stageEl.classList.remove('shake'); void stageEl.offsetWidth; stageEl.classList.add('shake');
 }
@@ -225,9 +225,9 @@ export function animateCurrentIncorrect(stageEl, level, result) {
 export function triggerCurrentDisqualifyAnimation(stageEl, level, result) {
   const displayVal = Math.round(Math.abs(result.value) * 1000) / 1000;
   if (level.world.type === 'direction') {
-    stageEl.innerHTML = buildDirectionScene(level, { readoutValue: displayVal, readoutColor: 'var(--red)', burnt: true });
+    stageEl.innerHTML = buildDirectionScene(level, { readoutValue: displayVal, readoutColor: 'var(--px-coral)', burnt: true });
   } else {
-    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--red)', burnt: true });
+    stageEl.innerHTML = buildScene(level, { readoutValue: displayVal, readoutColor: 'var(--px-coral)', burnt: true });
   }
   stageEl.classList.remove('shake'); void stageEl.offsetWidth; stageEl.classList.add('shake');
 }

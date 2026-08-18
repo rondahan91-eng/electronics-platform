@@ -128,18 +128,6 @@ export const DEFAULT_CURRICULA = {
   'י': ['charge-field', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
 };
 
-/**
- * מחזיר את נושאי הלימוד המשובצים לשכבה, בסדר הקנוני של המאגר (TOPICS) -
- * ללא תלות בסדר שבו הם שובצו בפועל. topicIds הוא רשימת מזהי הנושאים
- * המשובצים בפועל לשכבה זו (מגיע מ-fetchGrades); אם לא סופק, נופלים חזרה
- * לברירת המחדל (למשל לפני שהתקבלה תשובה מהשרת).
- */
-export function curriculumForGrade(grade, topicIds) {
-  const ids = topicIds || DEFAULT_CURRICULA[grade] || [];
-  const idSet = new Set(ids);
-  return Object.values(TOPICS).filter(t => idSet.has(t.id));
-}
-
 export function allGrades() {
   return Object.keys(DEFAULT_CURRICULA);
 }

@@ -11,12 +11,13 @@
 const SHEET_USERS = 'Users';
 const SHEET_LEVELS = 'LevelProgress';
 const SHEET_GRADES = 'Grades';
+const SHEET_REPORTS = 'Reports';
 
-// כל מזהי הנושאים האפשריים במאגר, ותוכנית הלימודים *ברירת המחדל* לכל שכבה
-// (משמשת רק לזריעת גיליון Grades חדש) - חייבים להישאר מסונכרנים ידנית עם
-// TOPICS/DEFAULT_CURRICULA ב-js/curriculum.js. השיבוץ בפועל לכל שכבה נשמר
-// בעמודת topicIds בגיליון Grades ונערך דרך פאנל הניהול.
-const ALL_TOPIC_IDS = ['charge-field', 'basic', 'advanced', 'ac', 'boss'];
+// תוכנית הלימודים *ברירת המחדל* לכל שכבה (משמשת רק לזריעת גיליון Grades
+// חדש) - חייבת להישאר מסונכרנת ידנית עם TOPICS/DEFAULT_CURRICULA
+// ב-js/curriculum.js. תוכן חשוף בפועל לתלמידים נשלט דרך עמודת revealed
+// (chapterKey מ-syllabus.js), לא דרך topicIds/unlockedCount למטה -
+// אלה נשארים בגיליון רק כשדה legacy, לא נכתבים או נקראים יותר בקוד.
 const DEFAULT_GRADE_TOPICS = { 'י': ['charge-field', 'basic', 'advanced', 'ac', 'boss'] };
 
 // -------------------------------------------------------------- כניסה ל-Web App
@@ -56,9 +57,12 @@ function routeAction(action, payload) {
     case 'saveLevelResult': return saveLevelResult(payload.studentId, payload.topicId, payload.levelId, payload.solved, payload.timeSeconds, payload.disqualified);
     case 'fetchMyProgress': return fetchMyProgress(payload.studentId);
     case 'fetchGrades': return fetchGrades();
-    case 'advanceGradeTopic': return advanceGradeTopic(payload.grade);
-    case 'assignTopicToGrade': return assignTopicToGrade(payload.grade, payload.topicId);
-    case 'removeTopicFromGrade': return removeTopicFromGrade(payload.grade, payload.topicId);
+    case 'fetchTopicLevelStats': return fetchTopicLevelStats(payload.topicId);
+    case 'revealChapter': return revealChapter(payload.grade, payload.key);
+    case 'hideChapter': return hideChapter(payload.grade, payload.key);
+    case 'submitReport': return submitReport(payload.studentId, payload.studentName, payload.grade, payload.screen, payload.text);
+    case 'fetchReports': return fetchReports();
+    case 'toggleReportOpen': return toggleReportOpen(payload.id);
     default: throw new Error('פעולה לא מוכרת: ' + action);
   }
 }
@@ -74,15 +78,19 @@ function getSheet(name) {
 function createSheet(ss, name) {
   const sheet = ss.insertSheet(name);
   if (name === SHEET_USERS) {
-    sheet.appendRow(['studentId', 'username', 'passHash', 'role', 'displayName', 'grade', 'createdAt']);
+    sheet.appendRow(['studentId', 'username', 'passHash', 'role', 'displayName', 'grade', 'streakDays', 'lastActiveDate', 'createdAt']);
     const now = new Date();
-    sheet.appendRow(['admin', 'admin', sha256('admin123'), 'admin', 'מורה ראשי', '', now]);
-    sheet.appendRow(['demo1', 'demo', sha256('demo1234'), 'student', 'תלמיד/ה לדוגמה', 'י', now]);
+    sheet.appendRow(['admin', 'admin', sha256('admin123'), 'admin', 'מורה ראשי', '', 0, '', now]);
+    sheet.appendRow(['demo1', 'demo', sha256('demo1234'), 'student', 'תלמיד/ה לדוגמה', 'י', 0, '', now]);
   } else if (name === SHEET_LEVELS) {
     sheet.appendRow(['studentId', 'topicId', 'levelId', 'solved', 'timeSeconds', 'disqualifications', 'attempts', 'updatedAt']);
   } else if (name === SHEET_GRADES) {
-    sheet.appendRow(['grade', 'unlockedCount', 'topicIds']);
-    Object.keys(DEFAULT_GRADE_TOPICS).forEach(g => sheet.appendRow([g, 1, DEFAULT_GRADE_TOPICS[g].join(',')]));
+    // 'revealed' = מפתחות פרקים חשופים (syllabus.js, "chapterKey#N"), הבסיס
+    // החדש לפתיחת תוכן לתלמידים - ריק כברירת מחדל, המורה חושף דרך הדשבורד.
+    sheet.appendRow(['grade', 'unlockedCount', 'topicIds', 'revealed']);
+    Object.keys(DEFAULT_GRADE_TOPICS).forEach(g => sheet.appendRow([g, 1, DEFAULT_GRADE_TOPICS[g].join(','), '']));
+  } else if (name === SHEET_REPORTS) {
+    sheet.appendRow(['id', 'studentId', 'studentName', 'grade', 'screen', 'text', 'open', 'createdAt']);
   }
   sheet.setFrozenRows(1);
   return sheet;
@@ -107,11 +115,34 @@ function sha256(str) {
 // -------------------------------------------------------------- פעולות API
 function authenticateUser(username, password) {
   if (!username || !password) throw new Error('שם משתמש וסיסמה הם שדות חובה');
-  const users = sheetToObjects(getSheet(SHEET_USERS));
-  const user = users.find(u => String(u.username).toLowerCase() === String(username).trim().toLowerCase());
-  if (!user) throw new Error('שם משתמש או סיסמה שגויים');
-  if (sha256(password) !== user.passHash) throw new Error('שם משתמש או סיסמה שגויים');
-  return { studentId: user.studentId, username: user.username, role: user.role, displayName: user.displayName, grade: user.grade || null };
+  const sheet = getSheet(SHEET_USERS);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const col = h => headers.indexOf(h);
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    if (String(row[col('username')]).toLowerCase() !== String(username).trim().toLowerCase()) continue;
+    if (sha256(password) !== row[col('passHash')]) throw new Error('שם משתמש או סיסמה שגויים');
+    const role = row[col('role')];
+    let streakDays = Number(row[col('streakDays')]) || 0;
+    // רצף ימי כניסה - מתעדכן פעם ביום לפי תאריך אמיתי, לא נתון מדומה.
+    if (role === 'student' && col('lastActiveDate') !== -1) {
+      const tz = Session.getScriptTimeZone();
+      const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+      const lastActive = row[col('lastActiveDate')];
+      if (lastActive !== today) {
+        const yesterday = Utilities.formatDate(new Date(Date.now() - 86400000), tz, 'yyyy-MM-dd');
+        streakDays = lastActive === yesterday ? streakDays + 1 : 1;
+        sheet.getRange(r + 1, col('streakDays') + 1).setValue(streakDays);
+        sheet.getRange(r + 1, col('lastActiveDate') + 1).setValue(today);
+      }
+    }
+    return {
+      studentId: row[col('studentId')], username: row[col('username')], role,
+      displayName: row[col('displayName')], grade: row[col('grade')] || null, streakDays,
+    };
+  }
+  throw new Error('שם משתמש או סיסמה שגויים');
 }
 
 function createNewStudent(username, password, displayName, grade) {
@@ -122,7 +153,7 @@ function createNewStudent(username, password, displayName, grade) {
     throw new Error('שם המשתמש כבר קיים במערכת');
   }
   const studentId = 's_' + Utilities.getUuid().slice(0, 8);
-  sheet.appendRow([studentId, username.trim(), sha256(password), 'student', displayName || username.trim(), grade || '', new Date()]);
+  sheet.appendRow([studentId, username.trim(), sha256(password), 'student', displayName || username.trim(), grade || '', 0, '', new Date()]);
   return { studentId, username: username.trim() };
 }
 
@@ -193,60 +224,81 @@ function fetchGrades() {
       grade,
       unlockedCount: row ? Number(row.unlockedCount) : 1,
       topicIds: row ? parseTopicIds(row.topicIds) : DEFAULT_GRADE_TOPICS[grade].slice(),
+      revealed: row ? parseTopicIds(row.revealed) : [],
     };
   });
 }
 
-function advanceGradeTopic(grade) {
-  if (!grade) throw new Error('חסרה שכבה');
+function setRevealed(grade, revealed) {
   const sheet = getSheet(SHEET_GRADES);
   const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const revealedCol = headers.indexOf('revealed') + 1; // 1-based; אם חסרה בגיליון ישן, לא נכתוב
   for (let r = 1; r < values.length; r++) {
     if (values[r][0] === grade) {
-      const max = parseTopicIds(values[r][2]).length;
-      const next = Math.min(Number(values[r][1]) + 1, max);
-      sheet.getRange(r + 1, 2).setValue(next);
-      return { unlockedCount: next };
+      if (revealedCol > 0) sheet.getRange(r + 1, revealedCol).setValue(revealed.join(','));
+      return;
     }
   }
-  const topicIds = DEFAULT_GRADE_TOPICS[grade] || [];
-  const next = Math.min(2, topicIds.length);
-  sheet.appendRow([grade, next, topicIds.join(',')]);
-  return { unlockedCount: next };
+  sheet.appendRow([grade, 1, (DEFAULT_GRADE_TOPICS[grade] || []).join(','), revealed.join(',')]);
 }
 
-function assignTopicToGrade(grade, topicId) {
-  if (!grade || ALL_TOPIC_IDS.indexOf(topicId) === -1) throw new Error('שכבה או נושא לא תקינים');
-  const sheet = getSheet(SHEET_GRADES);
-  const values = sheet.getDataRange().getValues();
-  for (let r = 1; r < values.length; r++) {
-    if (values[r][0] === grade) {
-      const topicIds = parseTopicIds(values[r][2]);
-      if (topicIds.indexOf(topicId) === -1) {
-        topicIds.push(topicId);
-        sheet.getRange(r + 1, 3).setValue(topicIds.join(','));
-      }
-      return { topicIds };
-    }
-  }
-  sheet.appendRow([grade, 1, topicId]);
-  return { topicIds: [topicId] };
+function revealChapter(grade, key) {
+  if (!grade || !key) throw new Error('חסרים פרטי שכבה/פרק');
+  const current = fetchGrades().find(g => g.grade === grade);
+  const revealed = current ? current.revealed.slice() : [];
+  if (revealed.indexOf(key) === -1) revealed.push(key);
+  setRevealed(grade, revealed);
+  return { revealed };
 }
 
-function removeTopicFromGrade(grade, topicId) {
-  if (!grade) throw new Error('חסרה שכבה');
-  const sheet = getSheet(SHEET_GRADES);
+function hideChapter(grade, key) {
+  if (!grade || !key) throw new Error('חסרים פרטי שכבה/פרק');
+  const current = fetchGrades().find(g => g.grade === grade);
+  const revealed = (current ? current.revealed : []).filter(k => k !== key);
+  setRevealed(grade, revealed);
+  return { revealed };
+}
+
+function fetchTopicLevelStats(topicId) {
+  const rows = sheetToObjects(getSheet(SHEET_LEVELS)).filter(r => r.topicId === topicId);
+  const byLevel = {};
+  rows.forEach(r => {
+    const id = Number(r.levelId);
+    if (!byLevel[id]) byLevel[id] = { levelId: id, dq: 0, attempts: 0 };
+    byLevel[id].dq += Number(r.disqualifications) || 0;
+    byLevel[id].attempts += Number(r.attempts) || 0;
+  });
+  return Object.values(byLevel).sort((a, b) => a.levelId - b.levelId);
+}
+
+function submitReport(studentId, studentName, grade, screen, text) {
+  if (!text || !String(text).trim()) throw new Error('נא לכתוב תיאור קצר של התקלה');
+  const sheet = getSheet(SHEET_REPORTS);
+  const id = 'R-' + Utilities.getUuid().slice(0, 8);
+  const now = new Date();
+  sheet.appendRow([id, studentId || '', studentName || 'לא ידוע', grade || '—', screen || '', String(text).trim(), true, now]);
+  return { id, studentId, studentName: studentName || 'לא ידוע', grade: grade || '—', screen, text: String(text).trim(), open: true, createdAt: now };
+}
+
+function fetchReports() {
+  return sheetToObjects(getSheet(SHEET_REPORTS)).map(r => Object.assign({}, r, { open: !!r.open })).reverse();
+}
+
+function toggleReportOpen(id) {
+  if (!id) throw new Error('חסר מזהה דיווח');
+  const sheet = getSheet(SHEET_REPORTS);
   const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const openCol = headers.indexOf('open') + 1;
   for (let r = 1; r < values.length; r++) {
-    if (values[r][0] === grade) {
-      const topicIds = parseTopicIds(values[r][2]).filter(id => id !== topicId);
-      const unlockedCount = Math.min(Number(values[r][1]) || 0, topicIds.length);
-      sheet.getRange(r + 1, 2).setValue(unlockedCount);
-      sheet.getRange(r + 1, 3).setValue(topicIds.join(','));
-      return { topicIds, unlockedCount };
+    if (values[r][0] === id) {
+      const newOpen = !values[r][openCol - 1];
+      sheet.getRange(r + 1, openCol).setValue(newOpen);
+      return { open: newOpen };
     }
   }
-  throw new Error('שכבה לא נמצאה');
+  throw new Error('דיווח לא נמצא');
 }
 
 function summarizeStudent(user, levelRows) {
@@ -267,5 +319,6 @@ function summarizeStudent(user, levelRows) {
     avgTimeSeconds,
     disqualifications,
     attempts,
+    lastActiveDate: user.lastActiveDate || null,
   };
 }

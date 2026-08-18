@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "electronics-platform",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "-m", "http.server", "8969"],
+      "port": 8969
+    },
+    {
+      "name": "design-system-export",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "-m", "http.server", "8931", "--directory", "C:\\Users\\ronda\\AppData\\Local\\Temp\\claude\\C--Users-ronda-Desktop---------------------------\\031abff2-f8a9-404a-912c-0d3417cb6d1a\\scratchpad\\design-system-export"],
+      "port": 8931
+    }
+  ]
+}
