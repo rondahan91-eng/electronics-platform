@@ -4,8 +4,9 @@
     {
       "name": "electronics-platform",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3", "-m", "http.server", "8969"],
-      "port": 8969
+      "runtimeArgs": ["-3", "-c", "import os,http.server as h; h.test(HandlerClass=h.SimpleHTTPRequestHandler, port=int(os.environ.get('PORT','8987')))"],
+      "port": 8987,
+      "autoPort": true
     },
     {
       "name": "design-system-export",

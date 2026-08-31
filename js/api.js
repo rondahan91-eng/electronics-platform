@@ -174,6 +174,17 @@ async function callLocal(action, payload) {
     return { revealed: db.grades[grade].revealed };
   }
 
+  if (action === 'changeMyPassword') {
+    const { studentId, currentPassword, newPassword } = payload;
+    const user = db.users.find(u => u.studentId === studentId);
+    if (!user) throw new Error('משתמש לא נמצא');
+    const hash = await sha256Hex(currentPassword);
+    if (hash !== user.passHash) throw new Error('הסיסמה הנוכחית שגויה');
+    user.passHash = await sha256Hex(newPassword);
+    saveDB(db);
+    return { ok: true };
+  }
+
   if (action === 'submitReport') {
     const { studentId, studentName, grade, screen, text } = payload;
     if (!text || !text.trim()) throw new Error('נא לכתוב תיאור קצר של התקלה');
@@ -268,6 +279,9 @@ export async function fetchGrades() {
 }
 export async function fetchTopicLevelStats(topicId) {
   return dispatch('fetchTopicLevelStats', { topicId });
+}
+export async function changeMyPassword(studentId, currentPassword, newPassword) {
+  return dispatch('changeMyPassword', { studentId, currentPassword, newPassword });
 }
 export async function submitReport(report) {
   return dispatch('submitReport', report);

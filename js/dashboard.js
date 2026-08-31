@@ -4,7 +4,7 @@
 // ==========================================================================
 import {
   fetchClassProgress, fetchGrades, fetchTopicLevelStats, fetchReports, toggleReportOpen,
-  createNewStudent, updateStudentPassword, revealChapter, hideChapter,
+  createNewStudent, updateStudentPassword, changeMyPassword, revealChapter, hideChapter,
 } from './api.js';
 import { TOPICS, allGrades } from './curriculum.js';
 import { SYLLABUS, chapterKey, chapterHasPractice, allChapters } from './syllabus.js';
@@ -444,6 +444,15 @@ export async function mountDashboard(app, session, onLogout) {
           </form>
           <p class="form-note">הסיסמאות נשמרות כגיבוב (hash) בלבד ולא כטקסט גלוי.</p>
         </div>
+        <div class="panel glass">
+          <h3>שינוי הסיסמה שלי</h3>
+          <form id="change-my-pass-form">
+            <div class="field"><label>סיסמה נוכחית</label><input type="password" id="my-current-pw" required></div>
+            <div class="field"><label>סיסמה חדשה</label><input type="password" id="my-new-pw" required minlength="4"></div>
+            <div class="field"><label>אימות סיסמה חדשה</label><input type="password" id="my-new-pw-confirm" required minlength="4"></div>
+            <button type="submit" class="secondary" style="width:100%;">עדכון הסיסמה שלי</button>
+          </form>
+        </div>
       </div>`;
   }
 
@@ -669,6 +678,25 @@ export async function mountDashboard(app, session, onLogout) {
       try {
         await updateStudentPassword(studentId, newPassword);
         toast('הסיסמה עודכנה בהצלחה');
+        e.target.reset();
+      } catch (err) {
+        toast('שגיאה: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('change-my-pass-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const current = document.getElementById('my-current-pw').value;
+      const next = document.getElementById('my-new-pw').value;
+      const confirmValue = document.getElementById('my-new-pw-confirm').value;
+      if (next !== confirmValue) { toast('הסיסמאות החדשות אינן תואמות', true); return; }
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      try {
+        await changeMyPassword(session.studentId, current, next);
+        toast('הסיסמה שלך עודכנה בהצלחה');
         e.target.reset();
       } catch (err) {
         toast('שגיאה: ' + err.message, true);

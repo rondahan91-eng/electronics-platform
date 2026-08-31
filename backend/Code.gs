@@ -60,6 +60,7 @@ function routeAction(action, payload) {
     case 'fetchTopicLevelStats': return fetchTopicLevelStats(payload.topicId);
     case 'revealChapter': return revealChapter(payload.grade, payload.key);
     case 'hideChapter': return hideChapter(payload.grade, payload.key);
+    case 'changeMyPassword': return changeMyPassword(payload.studentId, payload.currentPassword, payload.newPassword);
     case 'submitReport': return submitReport(payload.studentId, payload.studentName, payload.grade, payload.screen, payload.text);
     case 'fetchReports': return fetchReports();
     case 'toggleReportOpen': return toggleReportOpen(payload.id);
@@ -168,6 +169,20 @@ function updateStudentPassword(studentId, newPassword) {
     }
   }
   throw new Error('תלמיד לא נמצא');
+}
+
+function changeMyPassword(studentId, currentPassword, newPassword) {
+  if (!studentId || !currentPassword || !newPassword) throw new Error('חסרים פרטים לעדכון הסיסמה');
+  const sheet = getSheet(SHEET_USERS);
+  const values = sheet.getDataRange().getValues();
+  for (let r = 1; r < values.length; r++) {
+    if (values[r][0] === studentId) {
+      if (sha256(currentPassword) !== values[r][2]) throw new Error('הסיסמה הנוכחית שגויה');
+      sheet.getRange(r + 1, 3).setValue(sha256(newPassword));
+      return { ok: true };
+    }
+  }
+  throw new Error('משתמש לא נמצא');
 }
 
 function fetchClassProgress(topicId) {
