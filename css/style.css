@@ -440,6 +440,9 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .answer-shell input {
   flex: 1; min-width: 0; background: transparent; border: none; padding: 11px 13px;
   font: 500 16px var(--font-mono); color: var(--px-ink); outline: none;
+  /* הדף כולו dir="rtl" (html, body), אבל תשובה מספרית (כולל סימן שלילי)
+     חייבת תמיד לקרוא שמאל-לימין - אותה סיבה בדיוק כמו .circuit-stage svg. */
+  direction: ltr; text-align: left;
 }
 .answer-unit {
   padding: 0 13px; font: 700 14px var(--font-mono); color: var(--px-ink-soft);
