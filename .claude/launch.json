@@ -4,8 +4,8 @@
     {
       "name": "electronics-platform",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3", "-c", "import os,http.server as h; h.test(HandlerClass=h.SimpleHTTPRequestHandler, port=int(os.environ.get('PORT','8993')))"],
-      "port": 8993,
+      "runtimeArgs": ["-3", "-c", "import os,http.server as h; h.test(HandlerClass=h.SimpleHTTPRequestHandler, port=int(os.environ.get('PORT','8994')))"],
+      "port": 8994,
       "autoPort": true
     },
     {

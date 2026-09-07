@@ -250,7 +250,13 @@ export async function mountDashboard(app, session, onLogout) {
 
       const rowsHtml = sec.items.map(it => {
         const key = chapterKey(sec.key, it.n);
-        const on = revealedSet.has(key);
+        // חשיפה אינה נעולה לשכבת-הבית של הפרק - יש כפתור נפרד לכל שכבה
+        // רשומה, כדי לאפשר למורה לשתף פרק (למשל תרגול מעגלים מכיתה י')
+        // כתרגול חזרה לשכבה אחרת (למשל יא') בלי לגעת בחשיפה של השכבה המקורית.
+        const gradeTogglesHtml = state.grades.map(g => {
+          const isOn = new Set(g.revealed || []).has(key);
+          return `<button type="button" class="reveal-row-toggle${isOn ? ' on' : ''}" data-grade="${escapeHtml(g.grade)}" data-key="${key}" data-on="${isOn}" title="חשיפה לכיתה ${escapeHtml(g.grade)}'">${escapeHtml(g.grade)}'${isOn ? ' ✓' : ''}</button>`;
+        }).join('');
         const subs = it.subs || [];
         const practiceLevels = subs.reduce((a, sb) => a + (sb.total || 0), 0);
         const meta = (it.h ? `${it.h} שעות` : 'ניסוי מעבדה') + ` · ${subs.length} תת-נושאים` + (practiceLevels ? ` · ${practiceLevels} שלבי תרגול` : ' · אין עדיין תרגול');
@@ -270,7 +276,7 @@ export async function mountDashboard(app, session, onLogout) {
               <div class="reveal-row-title">${escapeHtml(it.title)}</div>
               <div class="reveal-row-meta">${meta}</div>
             </div>
-            <button type="button" class="reveal-row-toggle${on ? ' on' : ''}" data-grade="${grade}" data-key="${key}" data-on="${on}">${on ? 'חשוף' : 'מוסתר'}</button>
+            <div class="reveal-row-toggles">${gradeTogglesHtml}</div>
             <button type="button" class="reveal-row-caret${expanded ? ' open' : ''}" data-expand="${key}" title="תת-נושאים">⌄</button>
           </div>
           ${expanded ? `<div class="reveal-subs">${subsHtml}</div>` : ''}
@@ -297,7 +303,7 @@ export async function mountDashboard(app, session, onLogout) {
       <div style="max-width:900px;">
         <div class="panel glass">
           <h3 style="margin-bottom:6px;">חשיפת פרקים לתלמידים</h3>
-          <p class="form-note" style="margin-top:0;">החלוקה לפי תוכנית הלימודים "מבוא להנדסת אלקטרוניקה" (סמל 11.001). התלמידים רואים רק פרקים חשופים — ${totalRevealed} מתוך ${totalChapters} כרגע.</p>
+          <p class="form-note" style="margin-top:0;">החלוקה לפי תוכנית הלימודים "מבוא להנדסת אלקטרוניקה" (סמל 11.001). התלמידים רואים רק פרקים חשופים — ${totalRevealed} מתוך ${totalChapters} כרגע. לכל פרק יש כפתור חשיפה נפרד לכל כיתה - כך אפשר, למשל, לחשוף לכיתה יא' פרק תרגול מכיתה י' (כתרגול חזרה) בלי להשפיע על החשיפה לכיתה י' עצמה.</p>
         </div>
         ${sectionsHtml}
       </div>`;
