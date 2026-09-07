@@ -184,19 +184,21 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
         <div class="game-grid">
           <div class="qa-panel glass">
-            <div class="qa-question">${q.prompt} <span class="ask-target">(יחידות: ${q.unit})</span></div>
+            <div class="qa-question">${q.prompt}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}</div>
             <div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>
                 <div class="answer-shell">
-                  <input type="number" step="any" id="answer-input" placeholder="הזינו מספר">
-                  <span class="answer-unit">${q.unit}</span>
+                  ${q.inputMode === 'text'
+                    ? `<input type="text" id="answer-input" placeholder="הזינו תשובה" autocomplete="off" autocapitalize="off" spellcheck="false">`
+                    : `<input type="number" step="any" id="answer-input" placeholder="הזינו מספר">`}
+                  ${q.unit ? `<span class="answer-unit">${q.unit}</span>` : ''}
                 </div>
               </div>
               <button id="submit-answer">בדיקה</button>
               <button class="secondary" id="hint-btn" type="button">רמז</button>
             </div>
-            <p class="form-note" style="margin:9px 0 0;">ניתן להשתמש בכתיב מדעי, למשל <code>2.5e-3</code> במקום 0.0025.</p>
+            ${q.inputMode === 'text' ? '' : `<p class="form-note" style="margin:9px 0 0;">ניתן להשתמש בכתיב מדעי, למשל <code>2.5e-3</code> במקום 0.0025.</p>`}
             <div class="qa-feedback" id="qa-feedback"></div>
             <div class="hero-figure" id="hero-figure"></div>
             <div class="game-next-row" id="game-next-row"></div>
@@ -258,11 +260,17 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   function checkAnswer(level) {
     cleanupLevel();
     const input = document.getElementById('answer-input');
-    const val = parseFloat(input.value);
     const fb = document.getElementById('qa-feedback');
-    if (Number.isNaN(val)) {
+    // ברירת מחדל: קלט מספרי (כל הנושאים הקיימים). נושא יכול להצהיר per-level
+    // על question.inputMode='text' (למשל תשובה בבסיס בינארי/הקסדצימלי שבה
+    // אפסים מובילים משמעותיים, או תווים לא-מספריים כמו A-F) - level.question
+    // ולא topic, כי אותו topic יכול לערבב שני הסוגים בין שלביו.
+    const textMode = level.question.inputMode === 'text';
+    const val = textMode ? input.value.trim() : parseFloat(input.value);
+    const invalid = textMode ? !val : Number.isNaN(val);
+    if (invalid) {
       fb.className = 'qa-feedback bad show';
-      fb.innerHTML = '<span class="fb-tag">≠</span><span class="fb-text">נא להזין מספר תקין.</span>';
+      fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${textMode ? 'נא להזין תשובה.' : 'נא להזין מספר תקין.'}</span>`;
       return;
     }
 

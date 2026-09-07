@@ -22,6 +22,12 @@ import {
 import {
   renderCurrent, clearCurrentMarks, triggerCurrentDisqualifyAnimation, animateCurrentIncorrect,
 } from './game/currentRenderer.js';
+import {
+  generateDigitalNumbersLevel, evaluateDigitalNumbersAnswer, topicLevelCount as digitalNumbersLevelCount,
+} from './game/digitalNumbersLevelGenerator.js';
+import {
+  renderDigitalNumbers, clearDigitalNumbersMarks, triggerDigitalNumbersDisqualifyAnimation, animateDigitalNumbersIncorrect,
+} from './game/digitalNumbersRenderer.js';
 import { fmtTime } from './ui.js';
 
 export const TOPICS = {
@@ -81,6 +87,19 @@ export const TOPICS = {
       }
       return `✅ מדויק! זרם של ${q.answer}A - קצב זרימת המטען הנכון בדיוק (זמן: ${fmtTime(elapsedSeconds)}).`;
     },
+  },
+  'digital-numbers': {
+    id: 'digital-numbers',
+    title: 'שיטות ספירה',
+    subtitle: 'מעשרוני לבינארי, הקסדצימלי ו-BCD - קריאה וכתיבה על גבי רגיסטר דיגיטלי חי',
+    color: '#4f6df5',
+    totalLevels: digitalNumbersLevelCount(),
+    generateLevel: (localId) => generateDigitalNumbersLevel(localId),
+    render: renderDigitalNumbers,
+    evaluateAnswer: evaluateDigitalNumbersAnswer,
+    clearDisqualifyMarks: clearDigitalNumbersMarks,
+    triggerDisqualifyAnimation: triggerDigitalNumbersDisqualifyAnimation,
+    animateIncorrect: animateDigitalNumbersIncorrect,
   },
   basic: wrapCircuitTopic({
     id: 'basic',
