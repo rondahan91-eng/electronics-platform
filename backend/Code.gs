@@ -18,7 +18,7 @@ const SHEET_REPORTS = 'Reports';
 // ב-js/curriculum.js. תוכן חשוף בפועל לתלמידים נשלט דרך עמודת revealed
 // (chapterKey מ-syllabus.js), לא דרך topicIds/unlockedCount למטה -
 // אלה נשארים בגיליון רק כשדה legacy, לא נכתבים או נקראים יותר בקוד.
-const DEFAULT_GRADE_TOPICS = { 'י': ['charge-field', 'basic', 'advanced', 'ac', 'boss'] };
+const DEFAULT_GRADE_TOPICS = { 'י': ['charge-field', 'basic', 'advanced', 'ac', 'boss'], 'יא': [] };
 
 // -------------------------------------------------------------- כניסה ל-Web App
 function doPost(e) {

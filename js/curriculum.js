@@ -126,6 +126,7 @@ export const ALL_TOPIC_IDS = Object.keys(TOPICS);
  */
 export const DEFAULT_CURRICULA = {
   'י': ['charge-field', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
+  'יא': [], // אין עדיין אף topic בנוי לתוכן כיתה י"א (ראו syllabus.js - הכל "קר").
 };
 
 export function allGrades() {

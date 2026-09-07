@@ -21,12 +21,25 @@ function normalizeHeader(h) {
   return String(h || '').replace(/["'״׳]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+/** מנרמל ערך שכבה מקובץ Excel: מסיר גרשיים ומספר כיתה מקבילה בסוף
+ * (למשל "יא1"/"יא2" -> "יא", "י'" -> "י") - כיתות מקבילות מדווחות תמיד
+ * לאותה שכבה קנונית במערכת, שלא מבחינה בין כיתות מקבילות. */
+function normalizeGrade(g) {
+  return String(g || '').replace(/["'״׳]/g, '').replace(/\s+/g, '').replace(/\d+$/, '').trim();
+}
+
 function buildFieldMap(sampleRow) {
   const rawHeaders = Object.keys(sampleRow);
   const map = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
     const normalizedAliases = aliases.map(normalizeHeader);
-    const found = rawHeaders.find(h => normalizedAliases.includes(normalizeHeader(h)));
+    // התאמה מדויקת קודם; אם לא נמצאה, נופלים ל"מתחיל ב-" כדי לתמוך גם
+    // בכותרות עם הבהרה בסוגריים (למשל "ת.ז (4 ספרות אחרונות)").
+    const exact = rawHeaders.find(h => normalizedAliases.includes(normalizeHeader(h)));
+    const found = exact || rawHeaders.find(h => {
+      const nh = normalizeHeader(h);
+      return normalizedAliases.some(a => nh.startsWith(a));
+    });
     if (found) map[field] = found;
   }
   return map;
@@ -109,7 +122,7 @@ export async function parseStudentsExcel(file, existingUsernames = []) {
     const lastName = String(row[fieldMap.lastName] ?? '').trim();
     const idNumber = String(row[fieldMap.idNumber] ?? '').trim();
     const dobRaw = row[fieldMap.dob];
-    const grade = String(row[fieldMap.grade] ?? '').trim();
+    const grade = normalizeGrade(row[fieldMap.grade]);
 
     if (!firstName || !lastName || !idNumber || !dobRaw || !grade) {
       invalid.push({ row: excelRow, reason: 'חסרים שדות חובה בשורה.' });
