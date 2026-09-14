@@ -28,6 +28,12 @@ import {
 import {
   renderDigitalNumbers, clearDigitalNumbersMarks, triggerDigitalNumbersDisqualifyAnimation, animateDigitalNumbersIncorrect,
 } from './game/digitalNumbersRenderer.js';
+import {
+  generateLogicBasicsLevel, evaluateLogicBasicsAnswer, topicLevelCount as logicBasicsLevelCount,
+} from './game/logicBasicsLevelGenerator.js';
+import {
+  renderLogicBasics, clearLogicBasicsMarks, animateLogicBasicsIncorrect,
+} from './game/logicBasicsRenderer.js';
 import { fmtTime } from './ui.js';
 
 export const TOPICS = {
@@ -100,6 +106,21 @@ export const TOPICS = {
     clearDisqualifyMarks: clearDigitalNumbersMarks,
     triggerDisqualifyAnimation: triggerDigitalNumbersDisqualifyAnimation,
     animateIncorrect: animateDigitalNumbersIncorrect,
+  },
+  'logic-basics': {
+    id: 'logic-basics',
+    title: 'מושגי יסוד בלוגיקה',
+    subtitle: 'פסוק, אמת ושקר, וטבלת האמת הראשונה שלכם - הכל בשפה טבעית, בלי סמלים ובלי שערים לוגיים עדיין',
+    color: '#9d4edd',
+    totalLevels: logicBasicsLevelCount(),
+    generateLevel: (localId) => generateLogicBasicsLevel(localId),
+    render: renderLogicBasics,
+    evaluateAnswer: evaluateLogicBasicsAnswer,
+    clearDisqualifyMarks: clearLogicBasicsMarks,
+    animateIncorrect: animateLogicBasicsIncorrect,
+    // אין triggerDisqualifyAnimation - הטופיק הזה לא מייצר אף פעם
+    // outcome:'disqualified' (ראו logicBasicsLevelGenerator.js), והשדה
+    // אופציונלי לחלוטין לפי gameEngine.js.
   },
   basic: wrapCircuitTopic({
     id: 'basic',
