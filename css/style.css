@@ -485,19 +485,18 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .hint-item .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--px-amber); margin-top: 7px; flex: none; }
 .hint-item .text { color: var(--px-amber-ink); font-size: 13px; line-height: 1.6; }
 
-/* ריבוע צף עם ניסיונות/פסילות/זמן - קומפקטי, לא תופס נדל"ן בפריסה הראשית. */
+/* ריבוע צף עם ניסיונות/פסילות/זמן - קומפקטי, לא תופס נדל"ן בפריסה הראשית.
+   top:70px (לא 0) כדי לא להתנגש עם שורת "חזרה למפת השלבים / שלב X · פסילות"
+   שכבר יושבת בפינה השמאלית-העליונה של תוכן השלב עצמו. */
 .floating-stats {
-  position: fixed; left: 18px; bottom: 18px; z-index: 40;
+  position: fixed; left: 18px; top: 70px; z-index: 40;
   display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px;
 }
 .floating-stats-item { display: flex; justify-content: space-between; gap: 14px; font-size: 11.5px; }
 .floating-stats-item span { color: var(--px-ink-soft); }
 .floating-stats-item b { font: 700 12.5px var(--font-mono); color: var(--px-ink); }
 .floating-stats-item b.danger { color: var(--px-coral-ink); }
-@media (max-width: 780px) { .floating-stats { left: 10px; bottom: 10px; padding: 9px 11px; } .floating-stats-item { font-size: 10.5px; } }
-/* מתחת ל-860px .app-rail הופך לפס ניווט תחתון קבוע (position:sticky) -
-   מרימים את הריבוע הצף מעליו כדי שלא יתחבאו זה מתחת לזה. */
-@media (max-width: 860px) { .floating-stats { bottom: 78px; } }
+@media (max-width: 780px) { .floating-stats { left: 10px; top: 150px; padding: 9px 11px; } .floating-stats-item { font-size: 10.5px; } }
 
 /* ---------- Circuit SVG labels (בתוך "מסך המכשיר" הכהה) ---------- */
 .comp-label { fill: var(--px-ink-inverse); font-size: 12px; font-family: var(--font-mono); font-weight: 700; }
