@@ -392,8 +392,17 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .game-breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .game-breadcrumb .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .game-breadcrumb span:last-child { font: 600 11px/1 var(--font-main); color: var(--px-ink-soft); letter-spacing: .14em; }
-.game-intro h1 { margin: 0 0 8px; color: var(--px-ink); font-weight: 700; font-size: clamp(20px,2.6vw,26px); letter-spacing: -.5px; }
-.game-intro p { margin: 0; color: var(--px-ink-soft); font-size: 14.5px; line-height: 1.7; max-width: 70ch; }
+.game-intro h1 { margin: 0 0 10px; color: var(--px-ink); font-weight: 700; font-size: clamp(20px,2.6vw,26px); letter-spacing: -.5px; }
+.game-intro p { margin: 10px 0 0; color: var(--px-ink-soft); font-size: 14.5px; line-height: 1.7; max-width: 70ch; }
+/* ההסבר המילולי מוסתר כברירת מחדל - נדל"ן יקר שרוב התלמידים לא צריכים
+   ברוב הזמן; כפתור קטן פותח אותו במקום כשמישהו/י באמת לא בטוחים מה לעשות. */
+.intro-toggle {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--px-paper-sunken);
+  border: 1px solid var(--px-hairline-strong); border-radius: 999px; padding: 7px 14px;
+  font: 600 12.5px var(--font-main); color: var(--px-ink-soft); box-shadow: none; cursor: pointer;
+}
+.intro-toggle:hover { transform: none; box-shadow: none; color: var(--px-ink); background: var(--px-canvas); }
+.intro-toggle.open { color: var(--px-brand-deep); border-color: var(--px-brand); }
 
 .arena-wrap { position: relative; margin-bottom: 18px; }
 .arena-halo { position: absolute; inset: -10% -5%; pointer-events: none; background: var(--px-halo-brand); }
@@ -424,8 +433,9 @@ button.subtopic-row:not(.clickable) { cursor: default; }
    ממה שכל חישובי המיקום ברינדררים מניחים. חובה לאפס ל-ltr כאן. */
 .circuit-stage svg { max-width: 100%; direction: ltr; }
 
-.game-grid { display: grid; gap: 14px; align-items: start; grid-template-columns: minmax(0,1.35fr) minmax(0,1fr); }
-@media (max-width: 780px) { .game-grid { grid-template-columns: 1fr; } }
+/* לוח השאלה/תשובה תופס את כל הרוחב - הסטטיסטיקות עברו לריבוע צף
+   (floating-stats) כדי שהשאלה ותיבת התשובה תמיד נראות יחד בלי גלילה. */
+.game-grid { display: block; }
 
 .qa-panel { padding: 28px; }
 .qa-question { font-size: 15px; margin-bottom: 16px; line-height: 1.7; color: var(--px-ink); }
@@ -461,28 +471,33 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .hero-figure.show { display: flex; }
 .hero-value {
   background: var(--px-g-text-brand); -webkit-background-clip: text; background-clip: text; color: transparent;
-  font-family: var(--font-main); font-size: clamp(44px,7vw,76px); font-weight: 700; line-height: .9; letter-spacing: -3px;
+  font-family: var(--font-main); font-size: clamp(26px,3.2vw,38px); font-weight: 700; line-height: .95; letter-spacing: -1.5px;
 }
 .hero-caption { color: var(--px-ink-soft); font-size: 14px; line-height: 1.6; max-width: 26ch; }
 .game-next-row { margin-top: 18px; display: flex; gap: 9px; flex-wrap: wrap; }
 .game-next-row button.ground { background: var(--px-ground); color: var(--px-ink-inverse); box-shadow: none; }
 .game-next-row button.ground:hover { background: var(--px-ground-raised); }
 
-.game-side { display: flex; flex-direction: column; gap: 14px; }
-.hints-card { background: var(--px-amber-soft); border: 1px solid #eccf9e; border-radius: 28px; padding: 24px; }
+.hints-card { background: var(--px-amber-soft); border: 1px solid #eccf9e; border-radius: 20px; padding: 18px; margin-top: 16px; }
 .hints-card-label { font: 600 10.5px/1 var(--font-main); color: var(--px-amber-ink); letter-spacing: .14em; margin-bottom: 11px; }
 .hint-item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 9px; }
 .hint-item:last-child { margin-bottom: 0; }
 .hint-item .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--px-amber); margin-top: 7px; flex: none; }
 .hint-item .text { color: var(--px-amber-ink); font-size: 13px; line-height: 1.6; }
-.stats-card { padding: 24px; }
-.stats-card-label { font: 600 10.5px/1 var(--font-main); color: var(--px-ink-soft); letter-spacing: .14em; margin-bottom: 12px; }
-.stats-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 10px; }
-.stats-row:last-of-type { margin-bottom: 0; }
-.stats-row span { color: var(--px-ink-soft); }
-.stats-row b { font: 700 13px var(--font-mono); color: var(--px-ink); }
-.stats-row b.danger { color: var(--px-coral-ink); }
-.stats-note { margin: 13px 0 0; padding-top: 12px; border-top: 1px solid var(--px-hairline); font-size: 11.5px; color: var(--px-ink-soft); line-height: 1.6; }
+
+/* ריבוע צף עם ניסיונות/פסילות/זמן - קומפקטי, לא תופס נדל"ן בפריסה הראשית. */
+.floating-stats {
+  position: fixed; left: 18px; bottom: 18px; z-index: 40;
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px;
+}
+.floating-stats-item { display: flex; justify-content: space-between; gap: 14px; font-size: 11.5px; }
+.floating-stats-item span { color: var(--px-ink-soft); }
+.floating-stats-item b { font: 700 12.5px var(--font-mono); color: var(--px-ink); }
+.floating-stats-item b.danger { color: var(--px-coral-ink); }
+@media (max-width: 780px) { .floating-stats { left: 10px; bottom: 10px; padding: 9px 11px; } .floating-stats-item { font-size: 10.5px; } }
+/* מתחת ל-860px .app-rail הופך לפס ניווט תחתון קבוע (position:sticky) -
+   מרימים את הריבוע הצף מעליו כדי שלא יתחבאו זה מתחת לזה. */
+@media (max-width: 860px) { .floating-stats { bottom: 78px; } }
 
 /* ---------- Circuit SVG labels (בתוך "מסך המכשיר" הכהה) ---------- */
 .comp-label { fill: var(--px-ink-inverse); font-size: 12px; font-family: var(--font-mono); font-weight: 700; }

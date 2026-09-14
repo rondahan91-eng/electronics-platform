@@ -172,7 +172,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
         <div class="game-intro">
           <div class="game-breadcrumb"><span class="dot" style="background:${dotColor};"></span><span>${breadcrumb} · שלב ${localLevel}</span></div>
           <h1>${level.title}</h1>
-          <p>${level.description}</p>
+          <button type="button" class="intro-toggle" id="intro-toggle" aria-expanded="false">💡 הסבר על השלב</button>
+          <p class="game-intro-desc" id="game-intro-desc" hidden>${level.description}</p>
         </div>
 
         <div class="arena-wrap">
@@ -199,22 +200,20 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
               <button class="secondary" id="hint-btn" type="button">רמז</button>
             </div>
             ${q.inputMode === 'text' ? '' : `<p class="form-note" style="margin:9px 0 0;">ניתן להשתמש בכתיב מדעי, למשל <code>2.5e-3</code> במקום 0.0025.</p>`}
-            <div class="qa-feedback" id="qa-feedback"></div>
-            <div class="hero-figure" id="hero-figure"></div>
-            <div class="game-next-row" id="game-next-row"></div>
-          </div>
-          <div class="game-side">
             <div class="hints-card" id="hints-card" style="display:none;">
               <div class="hints-card-label">רמזים · <span id="hints-count">0</span>/${(q.hints || []).length}</div>
               <div id="hint-list"></div>
             </div>
-            <div class="stats-card glass">
-              <div class="stats-card-label">מה קורה בשלב הזה</div>
-              <div class="stats-row"><span>ניסיונות</span><b id="attempts-val">${lv0.attempts || 0}</b></div>
-              <div class="stats-row"><span>פסילות</span><b id="dq-val" class="${lv0.disqualifications ? 'danger' : ''}">${lv0.disqualifications || 0}</b></div>
-              <div class="stats-row"><span>זמן על השלב</span><b id="elapsed-val">0:00</b></div>
-            </div>
+            <div class="qa-feedback" id="qa-feedback"></div>
+            <div class="hero-figure" id="hero-figure"></div>
+            <div class="game-next-row" id="game-next-row"></div>
           </div>
+        </div>
+
+        <div class="floating-stats glass" id="floating-stats" title="מה קורה בשלב הזה">
+          <div class="floating-stats-item"><span>ניסיונות</span><b id="attempts-val">${lv0.attempts || 0}</b></div>
+          <div class="floating-stats-item"><span>פסילות</span><b id="dq-val" class="${lv0.disqualifications ? 'danger' : ''}">${lv0.disqualifications || 0}</b></div>
+          <div class="floating-stats-item"><span>זמן</span><b id="elapsed-val">0:00</b></div>
         </div>
       </div>`,
       { stats: shellStats() });
@@ -223,6 +222,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
     document.getElementById('hint-btn').addEventListener('click', () => showHint(level));
     document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));
+    const introToggle = document.getElementById('intro-toggle');
+    introToggle.addEventListener('click', () => {
+      const descEl = document.getElementById('game-intro-desc');
+      descEl.hidden = !descEl.hidden;
+      introToggle.setAttribute('aria-expanded', String(!descEl.hidden));
+      introToggle.classList.toggle('open', !descEl.hidden);
+    });
     const input = document.getElementById('answer-input');
     input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(level); });
     input.focus();
