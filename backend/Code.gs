@@ -48,24 +48,53 @@ function jsonResponse(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function routeAction(action, payload) {
-  switch (action) {
-    case 'authenticateUser': return authenticateUser(payload.username, payload.password);
-    case 'fetchClassProgress': return fetchClassProgress(payload.topicId);
-    case 'createNewStudent': return createNewStudent(payload.username, payload.password, payload.displayName, payload.grade);
-    case 'updateStudentPassword': return updateStudentPassword(payload.studentId, payload.newPassword);
-    case 'saveLevelResult': return saveLevelResult(payload.studentId, payload.topicId, payload.levelId, payload.solved, payload.timeSeconds, payload.disqualified);
-    case 'fetchMyProgress': return fetchMyProgress(payload.studentId);
-    case 'fetchGrades': return fetchGrades();
-    case 'fetchTopicLevelStats': return fetchTopicLevelStats(payload.topicId);
-    case 'revealChapter': return revealChapter(payload.grade, payload.key);
-    case 'hideChapter': return hideChapter(payload.grade, payload.key);
-    case 'changeMyPassword': return changeMyPassword(payload.studentId, payload.currentPassword, payload.newPassword);
-    case 'submitReport': return submitReport(payload.studentId, payload.studentName, payload.grade, payload.screen, payload.text);
-    case 'fetchReports': return fetchReports();
-    case 'toggleReportOpen': return toggleReportOpen(payload.id);
-    default: throw new Error('פעולה לא מוכרת: ' + action);
+// פעולות שכותבות לגיליון (כולל read-modify-write כמו saveLevelResult, וגם
+// עדכון streak בתוך authenticateUser) - חייבות לרוץ עם נעילה. בלי זה, שני
+// תלמידים ששולחים תשובה באותה שנייה (מצב רגיל לגמרי בכיתה חיה) עלולים
+// לגרום ל-Apps Script לזרוק שגיאת "Service Spreadsheets failed" (נראה
+// למשתמש כ"בעיית התחברות לשרת"), ובמקרה הגרוע גם לאבד/לשבש כתיבה - בדיוק
+// התסמינים של התקדמות שנעלמת ולוח בקרה ריק. קריאות בלבד (fetch*) לא
+// ננעלות - קריאה מקבילית מגיליון בטוחה, ורק כתיבה/read-modify-write מסוכנת.
+// authenticateUser לא ברשימה - רוב הקריאה שלה היא זיהוי בלבד (בטוח
+// במקביל), ורוב תחילת שיעור זה בדיוק הרגע שבו כל הכיתה מתחברת יחד; נועלים
+// שם רק את שתי השורות שבאמת כותבות (עדכון streak), לא את כל הפונקציה.
+const WRITE_ACTIONS = new Set([
+  'createNewStudent', 'updateStudentPassword', 'saveLevelResult',
+  'revealChapter', 'hideChapter', 'changeMyPassword', 'submitReport', 'toggleReportOpen',
+]);
+
+function withLock(fn) {
+  const lock = LockService.getScriptLock();
+  const gotLock = lock.tryLock(20000); // עד 20 שניות המתנה בתור (כיתה שלמה עונה בו-זמנית)
+  if (!gotLock) throw new Error('השרת עמוס כרגע - נסו שוב בעוד כמה שניות.');
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
   }
+}
+
+function routeAction(action, payload) {
+  const call = () => {
+    switch (action) {
+      case 'authenticateUser': return authenticateUser(payload.username, payload.password);
+      case 'fetchClassProgress': return fetchClassProgress(payload.topicId);
+      case 'createNewStudent': return createNewStudent(payload.username, payload.password, payload.displayName, payload.grade);
+      case 'updateStudentPassword': return updateStudentPassword(payload.studentId, payload.newPassword);
+      case 'saveLevelResult': return saveLevelResult(payload.studentId, payload.topicId, payload.levelId, payload.solved, payload.timeSeconds, payload.disqualified);
+      case 'fetchMyProgress': return fetchMyProgress(payload.studentId);
+      case 'fetchGrades': return fetchGrades();
+      case 'fetchTopicLevelStats': return fetchTopicLevelStats(payload.topicId);
+      case 'revealChapter': return revealChapter(payload.grade, payload.key);
+      case 'hideChapter': return hideChapter(payload.grade, payload.key);
+      case 'changeMyPassword': return changeMyPassword(payload.studentId, payload.currentPassword, payload.newPassword);
+      case 'submitReport': return submitReport(payload.studentId, payload.studentName, payload.grade, payload.screen, payload.text);
+      case 'fetchReports': return fetchReports();
+      case 'toggleReportOpen': return toggleReportOpen(payload.id);
+      default: throw new Error('פעולה לא מוכרת: ' + action);
+    }
+  };
+  return WRITE_ACTIONS.has(action) ? withLock(call) : call();
 }
 
 // -------------------------------------------------------------- גישה לגיליונות
@@ -134,8 +163,11 @@ function authenticateUser(username, password) {
       if (lastActive !== today) {
         const yesterday = Utilities.formatDate(new Date(Date.now() - 86400000), tz, 'yyyy-MM-dd');
         streakDays = lastActive === yesterday ? streakDays + 1 : 1;
-        sheet.getRange(r + 1, col('streakDays') + 1).setValue(streakDays);
-        sheet.getRange(r + 1, col('lastActiveDate') + 1).setValue(today);
+        const streakDaysToWrite = streakDays;
+        withLock(() => {
+          sheet.getRange(r + 1, col('streakDays') + 1).setValue(streakDaysToWrite);
+          sheet.getRange(r + 1, col('lastActiveDate') + 1).setValue(today);
+        });
       }
     }
     return {
