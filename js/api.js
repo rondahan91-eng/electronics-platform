@@ -15,17 +15,46 @@ async function sha256Hex(str) {
 }
 
 // ---------------------------------------------------------------- תקשורת אמיתית
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// שגיאות רשת/עומס זמני בלבד מנוסות שוב (עד 3 ניסיונות נוספים, בהשהיה
+// גדלה) - שגיאה עסקית אמיתית (סיסמה שגויה, שם משתמש תפוס וכו') נזרקת מיד
+// בלי ניסיון חוזר, כי לחזור עליה לא עוזר. המטרה: תקלת-רגע (בעיית רשת
+// חולפת, 503 זמני, או "השרת עמוס" מנעילת-תור ב-Code.gs) לא תיראה למשתמש/ת
+// ככישלון קשיח - היא תיפתר בשקט ברוב המקרים בלי לדרוש לחיצה חוזרת.
+const RETRY_DELAYS_MS = [500, 1200, 2500];
+const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
+
 async function callRemote(action, payload) {
-  // משתמשים ב-Content-Type: text/plain כדי להימנע מ-CORS preflight (Apps Script לא תומך ב-OPTIONS)
-  const res = await fetch(CONFIG.API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, payload }),
-  });
-  if (!res.ok) throw new Error('שגיאת רשת מול השרת (' + res.status + ')');
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || 'שגיאת שרת לא ידועה');
-  return data.result;
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      // משתמשים ב-Content-Type: text/plain כדי להימנע מ-CORS preflight (Apps Script לא תומך ב-OPTIONS)
+      res = await fetch(CONFIG.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action, payload }),
+      });
+    } catch (networkErr) {
+      // ה-fetch עצמו נכשל (אין אינטרנט/DNS/הבקשה נחסמה) - זמני מטבעו.
+      if (attempt < RETRY_DELAYS_MS.length) { await sleep(RETRY_DELAYS_MS[attempt]); continue; }
+      throw new Error('בעיית חיבור לאינטרנט - בדקו את החיבור ונסו שוב.');
+    }
+    if (!res.ok) {
+      if (RETRYABLE_HTTP_STATUS.has(res.status) && attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]); continue;
+      }
+      throw new Error('שגיאת רשת מול השרת (' + res.status + ')');
+    }
+    const data = await res.json();
+    if (!data.ok) {
+      if (String(data.error || '').indexOf('השרת עמוס') !== -1 && attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]); continue;
+      }
+      throw new Error(data.error || 'שגיאת שרת לא ידועה');
+    }
+    return data.result;
+  }
 }
 
 // ---------------------------------------------------------------- DEV MODE (localStorage)
