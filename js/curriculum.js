@@ -5,11 +5,10 @@
 // ==========================================================================
 import { generateTopicLevel, topicLevelCount } from './game/levelGenerator.js';
 import { wrapCircuitTopic } from './game/circuitTopicAdapter.js';
-import { generateAsteroidLevel, evaluateAsteroidAnswer, topicLevelCount as asteroidLevelCount } from './game/asteroidLevelGenerator.js';
 import {
-  renderAsteroid, clearAsteroidMarks, triggerAsteroidDisqualifyAnimation,
-  animateAsteroidIncorrect, mountAsteroidStopwatch,
-} from './game/asteroidRenderer.js';
+  generateStaticChargeLevel, evaluateStaticChargeAnswer, topicLevelCount as staticChargeLevelCount,
+} from './game/staticChargeLevelGenerator.js';
+import { renderStaticCharge } from './game/staticChargeRenderer.js';
 import {
   generateVoltageLevel, evaluateVoltageAnswer, topicLevelCount as voltageLevelCount,
 } from './game/voltageSourceLevelGenerator.js';
@@ -36,22 +35,51 @@ import {
 } from './game/logicBasicsRenderer.js';
 import { fmtTime } from './ui.js';
 
+/** הודעת הצלחה של 'static-charge': משפט אחד, נגזר מהשלב (סימן הכוח / סוג האינטראקציה).
+ * הערך עטוף ב-LTR כי gameEngine מזריק את ההודעה כ-HTML בתוך טקסט RTL. */
+function staticChargeSuccessMessage(level) {
+  const q = level.question, w = level.world;
+  const val = `<span dir="ltr">${String(q.answer).replace('-', '−')} ${q.unit.trim()}</span>`;
+  switch (w.unknown) {
+    case 'force':
+      return `✅ מדויק! הכוח הוא ${val} - ${w.interaction === 'attract'
+        ? 'מטענים מנוגדים נמשכים, ולכן הכוח שלילי (משיכה)'
+        : 'מטענים באותו סימן נדחים, ולכן הכוח חיובי (דחייה)'}.`;
+    case 'force_new_distance': {
+      const k = Math.round(1 / w.geometry.rNearRel);
+      return `✅ מדויק! המרחק קטן פי ${k}, ולכן הכוח גדל פי ${k * k} ועומד על ${val}.`;
+    }
+    case 'electron_count':
+      return `✅ מדויק! ${q.answer}${q.unit} אלקטרונים עברו מהשיער אל הבלון, והבלון נטען שלילית.`;
+    case 'field':
+      return `✅ מדויק! השדה החשמלי של הבלון במקום הזרם הוא ${val}, והוא מצביע אל הבלון השלילי.`;
+    case 'source_charge':
+      return `✅ מדויק! גודל מטען הסרגל הוא ${val}, והסרגל השלילי מושך אליו את הנייר.`;
+    case 'distance':
+      return `✅ מדויק! הבלון נמצא במרחק ${val} מהקיר, והכוח ביניהם הוא כוח משיכה.`;
+    case 'min_source_charge':
+      return `✅ מדויק! כשמטען הסרגל הוא ${val} לפחות, הכוח החשמלי מגיע למשקל הנייר, ומעבר לזה הנייר מתרומם.`;
+    case 'force_over_weight':
+      return `✅ מדויק! הכוח החשמלי גדול פי ${q.answer} ממשקל הטיפה, ולכן הזרם מתכופף אל הבלון.`;
+    default:
+      return '✅ מדויק! פתרתם את השלב.';
+  }
+}
+
 export const TOPICS = {
-  'charge-field': {
-    id: 'charge-field',
+  'static-charge': {
+    id: 'static-charge',
     title: 'מטען, כוח ושדה חשמלי',
-    subtitle: 'ניווט בין אסטרואידים טעונים - חוק קולון בפעולה',
+    subtitle: 'ניסויי חשמל סטטי פשוטים: סרגל ונייר, בלון וקיר, בלון וזרם מים',
     color: '#ffcc33',
-    totalLevels: asteroidLevelCount(),
-    generateLevel: (localId) => generateAsteroidLevel(localId),
-    render: renderAsteroid,
-    evaluateAnswer: evaluateAsteroidAnswer,
-    clearDisqualifyMarks: clearAsteroidMarks,
-    triggerDisqualifyAnimation: triggerAsteroidDisqualifyAnimation,
-    animateIncorrect: animateAsteroidIncorrect,
-    onLevelMount: mountAsteroidStopwatch,
-    successMessage: (level, elapsedSeconds) =>
-      `✅ מעולה! איזנתם את הכוח בול - הספינה חלפה על פני האסטרואיד במסלול יציב (זמן: ${fmtTime(elapsedSeconds)}).`,
+    totalLevels: staticChargeLevelCount(),
+    generateLevel: (localId) => generateStaticChargeLevel(localId),
+    render: renderStaticCharge,
+    evaluateAnswer: evaluateStaticChargeAnswer,
+    successMessage: staticChargeSuccessMessage,
+    // אין clearDisqualifyMarks / triggerDisqualifyAnimation / animateIncorrect /
+    // onLevelMount - אין פסילה ואין שעון עוצר בנושא הזה (ראו staticChargeLevelGenerator.js);
+    // תשובה שגויה = ריטוט ברירת המחדל של gameEngine.js.
   },
   'voltage-sources': {
     id: 'voltage-sources',
@@ -165,7 +193,7 @@ export const ALL_TOPIC_IDS = Object.keys(TOPICS);
  * נתון עריך שנשמר לכל שכבה (topicIds) ומנוהל דרך פאנל הניהול.
  */
 export const DEFAULT_CURRICULA = {
-  'י': ['charge-field', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
+  'י': ['static-charge', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
   'יא': [], // אין עדיין אף topic בנוי לתוכן כיתה י"א (ראו syllabus.js - הכל "קר").
 };
 

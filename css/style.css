@@ -413,7 +413,7 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 }
 .arena-portal.solved { background: var(--px-g-brand); box-shadow: var(--px-shadow-cta-glow); }
 /* "מסך מכשיר" כהה בכוונה - זוהי הזירה שבה מצוירים כל ה-SVG של המשחקים
-   (מעגלים/מטען ושדה/אסטרואידים/מקורות מתח/זרם). פלטת הסכימה הכהה
+   (מעגלים/מטען ושדה/ניסויי חשמל סטטי/מקורות מתח/זרם). פלטת הסכימה הכהה
    (--px-schem-*) והצבעים הסמנטיים (--px-brand-bright/coral/amber) שה-SVG
    שלהם מפנה אליהם ישירות מוגדרים למעלה בקובץ - ראו הערה בראש הקובץ. */
 .circuit-stage {
@@ -440,6 +440,30 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .qa-panel { padding: 28px; }
 .qa-question { font-size: 15px; margin-bottom: 16px; line-height: 1.7; color: var(--px-ink); }
 .qa-question .ask-target { color: #b8860b; font-weight: 800; }
+
+/* נתוני השאלה (question.data): כל נתון בשורה נפרדת - תווית מימין, ערך LTR
+   משמאל, ובינהם קו מנחה מנוקד. ברוחב מוגבל כדי שהעין לא תצטרך לחצות את כל
+   הלוח; בלי כרטיס כבד - רק פס צד עדין. */
+.q-data {
+  list-style: none; margin: 14px 0 0; padding-block: 2px; padding-inline: 12px 0;
+  max-width: 440px; border-inline-start: 3px solid var(--px-mint-edge);
+  display: grid; gap: 7px;
+}
+.q-data li { display: flex; align-items: baseline; gap: 8px; min-width: 0; line-height: 1.5; }
+.q-data li::after {
+  content: ''; order: 2; flex: 1 1 14px; min-width: 14px;
+  border-bottom: 1px dotted var(--px-hairline-strong); transform: translateY(-3px);
+}
+.q-data-label { order: 1; min-width: 0; font-size: 14px; color: var(--px-ink-soft); text-wrap: balance; }
+.q-data-value {
+  order: 3; flex: none; white-space: nowrap; direction: ltr; unicode-bidi: isolate;
+  font: 700 15px var(--font-mono); color: var(--px-ink);
+}
+@media (max-width: 480px) {
+  .q-data { max-width: none; padding-inline-start: 10px; gap: 6px; }
+  .q-data-label { font-size: 13px; }
+  .q-data-value { font-size: 14px; }
+}
 .qa-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .qa-row .field { flex: 1; min-width: 150px; margin-bottom: 0; }
 .answer-shell {

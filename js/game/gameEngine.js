@@ -157,6 +157,11 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // הזירה מוצגת "פתוחה" (סטטית) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
     const { svg } = topic.render(level, false);
     const lv0 = state.progress.levels[level.id] || {};
+    // נושא יכול להצהיר על question.data = [{label, value}] - כל נתון בשורה נפרדת
+    // משלו מתחת לשאלה (ולא משולב בתוך משפט). בלי data - לא מוצג דבר.
+    const dataRows = Array.isArray(q.data) && q.data.length
+      ? `<ul class="q-data">${q.data.map(d => `<li><span class="q-data-label">${d.label}</span><b class="q-data-value" dir="ltr">${d.value}</b></li>`).join('')}</ul>`
+      : '';
 
     app.innerHTML = shellHtml(session, session.role === 'admin' ? 'teacher' : 'home', `
       <div class="game-wrap">
@@ -185,7 +190,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
         <div class="game-grid">
           <div class="qa-panel glass">
-            <div class="qa-question">${q.prompt}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}</div>
+            <div class="qa-question">${q.prompt}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
             <div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>
