@@ -28,6 +28,27 @@ const HEBREW = /[֐-׿]/;
 // הסדר שלהם לא יתהפך (למשל "F ב-N, Q ו-q ב-C").
 const LTR_RUN = /[^֐-׿\s]+(?:\s+[^֐-׿\s]+)*/g;
 
+// רק רצף שיש בו אות לטינית, ספרה או סימן מתמטי נעטף. רצף של פיסוק בלבד (למשל סוגר בודד ליד
+// מילה עברית) נשאר טקסט רגיל: בתוך span LTR סוגר לא מתהפך חזותית, וכך נוצרו סוגריים הפוכים.
+const WORDCHAR = /[A-Za-z0-9²³¹⁰-₟Ͱ-Ͽ]/;
+
+function count(str, ch) { return str.split(ch).length - 1; }
+
+// מסיר מקצוות הרצף סוגר פותח/סוגר שאין לו זוג בתוך הרצף עצמו - הוא שייך לטקסט העברי שמסביב
+// ויתהפך נכון שם. מחזיר [כמה תווים נחתכו מההתחלה, הרצף החדש].
+function trimUnbalanced(run) {
+  let cut = 0;
+  const pairs = [['(', ')'], ['[', ']'], ['{', '}']];
+  for (let changed = true; changed && run;) {
+    changed = false;
+    for (const [open, close] of pairs) {
+      if (run[0] === open && count(run, open) > count(run, close)) { run = run.slice(1); cut += 1; changed = true; }
+      else if (run[run.length - 1] === close && count(run, close) > count(run, open)) { run = run.slice(0, -1); changed = true; }
+    }
+  }
+  return [cut, run];
+}
+
 function appendMixed(node, text) {
   let last = 0;
   for (const m of text.matchAll(LTR_RUN)) {
@@ -35,10 +56,17 @@ function appendMixed(node, text) {
     let run = m[0];
     // מקף שמחבר אות-יחס עברית (ב-, ו-, ל-) לסמל לטיני שייך לצד העברי
     if (run[0] === '-' && start > 0 && HEBREW.test(text[start - 1])) { start += 1; run = run.slice(1); }
-    // פיסוק בסוף הרצף נשאר בצד העברי
+    // פיסוק בתחילת הרצף (סוף משפט עברי שלפניו) ובסופו (סוף הרצף) נשאר בצד העברי
+    const lead = run.match(/^[,.;:!?\s]+/);
+    if (lead) { start += lead[0].length; run = run.slice(lead[0].length); }
     const trail = run.match(/[,.;:!?]+$/);
     if (trail) run = run.slice(0, -trail[0].length);
-    if (!run) continue;
+    const [cut, trimmed] = trimUnbalanced(run);
+    start += cut;
+    run = trimmed;
+    const trail2 = run.match(/[,.;:!?]+$/);
+    if (trail2) run = run.slice(0, -trail2[0].length);
+    if (!run || !WORDCHAR.test(run)) continue;
     if (start > last) node.appendChild(document.createTextNode(text.slice(last, start)));
     const span = document.createElement('span');
     span.setAttribute('dir', 'ltr');
