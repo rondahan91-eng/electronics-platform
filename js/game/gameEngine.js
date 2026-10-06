@@ -4,6 +4,8 @@
 // שמספק generateLevel/render/evaluateAnswer משלו - gameEngine לא מכיר
 // פיזיקה ספציפית כלל.
 //
+// topic.formulas (אופציונלי): דף נוסחאות לבועה הצפה - ראו formulaSheet.js. כל נושא חדש צריך להגדיר אותו.
+//
 // opts.subtopic (אופציונלי) = {levelStart, levelEnd, chapterN, chapterTitle,
 // n, title, color} - "חלון" תת-נושא על טווח שלבים בתוך ה-topic (ראו
 // home.js). כשלא סופק (עדיין המצב ב-preview מהדשבורד, עד שלב 6) - נופלים
@@ -13,6 +15,7 @@ import { playSuccess, playError, playBurn, playClick } from './audio.js';
 import { saveLevelResult, fetchMyProgress } from '../api.js';
 import { CONFIG } from '../config.js';
 import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
+import { attachFormulaSheet } from './formulaSheet.js';
 
 export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
   const preview = !!opts.preview;
@@ -28,6 +31,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
   const state = { progress: { highestLevel: 0, levels: {} }, allProgress: {}, levelId: null, startTs: null, hintsShown: 0 };
   let cleanupLevel = () => {};
+  // בועת דף הנוסחאות (topic.formulas): מצב הפתיחה נשמר בין שלבים; הבועה עצמה נבנית מחדש אחרי כל רינדור.
+  const formulaState = { open: false };
   if (!preview) {
     try {
       const all = await fetchMyProgress(session.studentId);
@@ -132,6 +137,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       { stats: shellStats() });
 
     wireShell(onLogout, onBack, { session, screen: `מפת השלבים · ${breadcrumb}` });
+    attachFormulaSheet(app, topic, formulaState);
     document.getElementById('back-home').addEventListener('click', onBack);
     app.querySelectorAll('.level-node:not(.locked)').forEach(n => {
       n.addEventListener('click', () => { playClick(); openLevel(parseInt(n.dataset.level, 10)); });
@@ -224,6 +230,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       { stats: shellStats() });
 
     wireShell(onLogout, onBack, { session, screen: `מסך תרגול · ${breadcrumb} · שלב ${localLevel}` });
+    attachFormulaSheet(app, topic, formulaState);
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
     document.getElementById('hint-btn').addEventListener('click', () => showHint(level));
     document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));

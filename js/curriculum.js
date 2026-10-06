@@ -34,6 +34,7 @@ import {
   renderLogicBasics, clearLogicBasicsMarks, animateLogicBasicsIncorrect,
 } from './game/logicBasicsRenderer.js';
 import { fmtTime } from './ui.js';
+import { STATIC_CHARGE_FORMULAS } from './game/staticChargeFormulas.js';
 
 /** הודעת הצלחה של 'static-charge': משפט אחד, נגזר מהשלב (סימן הכוח / סוג האינטראקציה).
  * הערך עטוף ב-LTR כי gameEngine מזריק את ההודעה כ-HTML בתוך טקסט RTL. */
@@ -77,6 +78,7 @@ export const TOPICS = {
     render: renderStaticCharge,
     evaluateAnswer: evaluateStaticChargeAnswer,
     successMessage: staticChargeSuccessMessage,
+    formulas: STATIC_CHARGE_FORMULAS,
     // אין clearDisqualifyMarks / triggerDisqualifyAnimation / animateIncorrect /
     // onLevelMount - אין פסילה ואין שעון עוצר בנושא הזה (ראו staticChargeLevelGenerator.js);
     // תשובה שגויה = ריטוט ברירת המחדל של gameEngine.js.
