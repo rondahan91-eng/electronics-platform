@@ -159,6 +159,7 @@ export const TOPICS = {
     clearDisqualifyMarks: clearDigitalNumbersMarks,
     triggerDisqualifyAnimation: triggerDigitalNumbersDisqualifyAnimation,
     animateIncorrect: animateDigitalNumbersIncorrect,
+    answerTools: false, // מספרים שלמים קטנים: אין צורך בכתיב מדעי/שברים
   },
   'logic-basics': {
     id: 'logic-basics',
@@ -171,6 +172,7 @@ export const TOPICS = {
     evaluateAnswer: evaluateLogicBasicsAnswer,
     clearDisqualifyMarks: clearLogicBasicsMarks,
     animateIncorrect: animateLogicBasicsIncorrect,
+    answerTools: false, // ספירות ומספרים שלמים קטנים: בלי סרגל כתיב מדעי
     // אין triggerDisqualifyAnimation - הטופיק הזה לא מייצר אף פעם
     // outcome:'disqualified' (ראו logicBasicsLevelGenerator.js), והשדה
     // אופציונלי לחלוטין לפי gameEngine.js.

@@ -522,6 +522,28 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .floating-stats-item b.danger { color: var(--px-coral-ink); }
 @media (max-width: 780px) { .floating-stats { left: 10px; top: 150px; padding: 9px 11px; } .floating-stats-item { font-size: 10.5px; } }
 
+/* ---------- לחצני כתיב לשדה התשובה (js/game/answerInput.js) ----------
+   שורת לחצנים מתחת לשדה: ×, ÷, שבר, חזקה, ×10ⁿ, כתיב עילי/תחתי, מינוס, סוגריים. */
+.ans-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+button.ans-key {
+  min-width: 42px; min-height: 38px; padding: 6px 11px; border-radius: 10px; font: 700 15px var(--font-mono);
+  direction: ltr; unicode-bidi: isolate; /* "×10ⁿ" נקרא משמאל לימין גם בעמוד RTL */
+  background: var(--px-canvas); color: var(--px-ink); border: 1px solid var(--px-hairline-strong); box-shadow: none;
+}
+@media (hover: hover) { button.ans-key:hover:not(:disabled) { background: var(--px-mint); border-color: var(--px-brand); transform: none; } }
+button.ans-key[aria-pressed="true"] { background: var(--px-brand-deep); color: #fff; border-color: var(--px-brand-deep); }
+button.ans-key.danger { color: var(--px-coral-ink); border-color: var(--px-coral); }
+button.ans-key:focus-visible { outline: 3px solid var(--px-brand-deep); outline-offset: 2px; }
+button.ans-key:disabled { opacity: .45; cursor: not-allowed; }
+@media (pointer: coarse) { button.ans-key { min-width: 44px; min-height: 44px; } }
+.ans-preview { min-height: 20px; margin-top: 6px; font-size: 13px; color: var(--px-ink-soft); }
+.ans-preview.ok { color: var(--px-brand-deep); }
+.ans-preview.ok bdi { font: 700 14px var(--font-mono); }
+.ans-preview.bad { color: var(--px-coral-ink); }
+/* מסך צר: השדה תופס שורה מלאה, ו"בדיקה"/"רמז" מתחתיו */
+@media (max-width: 600px) { .qa-row .field { flex: 1 1 100%; } }
+.form-note code { direction: ltr; unicode-bidi: isolate; }
+
 /* ---------- בועת דף הנוסחאות (js/game/formulaSheet.js, topic.formulas) ----------
    בועה בפינה השמאלית-תחתונה: נפתחת/נסגרת בלחיצה. הלוח הפתוח *לא* צף מעל התוכן (כך
    הוא הסתיר את תיבת התשובה והכפתורים): במסך רחב הוא עמודה בצד שמאל שדוחפת את התוכן,

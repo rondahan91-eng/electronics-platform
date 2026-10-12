@@ -19,6 +19,7 @@ import { saveLevelResult, fetchMyProgress } from '../api.js';
 import { CONFIG } from '../config.js';
 import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
 import { attachFormulaSheet } from './formulaSheet.js';
+import { parseAnswer, mountAnswerToolbar } from './answerInput.js';
 
 export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
   const preview = !!opts.preview;
@@ -34,6 +35,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
   const state = { progress: { highestLevel: 0, levels: {} }, allProgress: {}, levelId: null, startTs: null, hintsShown: 0 };
   let cleanupLevel = () => {};
+  let answerTools = null; // סרגל לחצני הכתיב של השלב הפתוח (answerInput.js)
   // בועת דף הנוסחאות (topic.formulas): מצב הפתיחה נשמר בין שלבים; הבועה עצמה נבנית מחדש אחרי כל רינדור.
   const formulaState = { open: false };
   if (!preview) {
@@ -158,12 +160,15 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     state.levelId = id;
     state.startTs = performance.now();
     state.hintsShown = 0;
+    state.solvedLock = false; // נעילה אחרי תשובה נכונה: מונעת ספירה כפולה (Enter חוזר בזמן שמירה)
     renderLevel();
   }
 
   function renderLevel() {
     const level = topic.generateLevel(state.levelId);
     const q = level.question;
+    // סרגל לחצני הכתיב: רק בשדה מספרי, ורק בנושא שלא כיבה אותו (topic.answerTools === false)
+    const useTools = q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
     const breadcrumb = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
     const dotColor = sub.color || 'var(--px-brand)';
@@ -210,19 +215,19 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
                 <div class="answer-shell">
                   ${q.inputMode === 'text'
                     ? `<input type="text" id="answer-input" placeholder="הזינו תשובה" autocomplete="off" autocapitalize="off" spellcheck="false">`
-                    : `<input type="number" step="any" id="answer-input" placeholder="הזינו מספר">`}
+                    : `<input type="text" inputmode="decimal" dir="ltr" id="answer-input" placeholder="${useTools ? 'מספר או ביטוי' : 'הזינו מספר'}" autocomplete="off" autocapitalize="off" spellcheck="false"${useTools ? ' aria-describedby="ans-preview"' : ''}>`}
                   ${q.unit ? `<span class="answer-unit">${q.unit}</span>` : ''}
                 </div>
               </div>
               <button id="submit-answer">בדיקה</button>
               <button class="secondary" id="hint-btn" type="button">רמז</button>
             </div>
-            ${q.inputMode === 'text' ? '' : `<p class="form-note" style="margin:9px 0 0;">ניתן להשתמש בכתיב מדעי, למשל <code>2.5e-3</code> במקום 0.0025.</p>`}
+            ${!useTools ? '' : `<div id="answer-tools-host"></div><p class="form-note" style="margin:9px 0 0;">אפשר להקליד מספר רגיל, כתיב מדעי (<code>2.5e-3</code>) או ביטוי עם הלחצנים: <code>×10ⁿ</code>, שבר, חזקה, כפל וחילוק.</p>`}
             <div class="hints-card" id="hints-card" style="display:none;">
               <div class="hints-card-label">רמזים · <span id="hints-count">0</span>/${(q.hints || []).length}</div>
               <div id="hint-list"></div>
             </div>
-            <div class="qa-feedback" id="qa-feedback"></div>
+            <div class="qa-feedback" id="qa-feedback" role="status" aria-live="polite"></div>
             <div class="hero-figure" id="hero-figure"></div>
             <div class="game-next-row" id="game-next-row"></div>
           </div>
@@ -250,6 +255,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     });
     const input = document.getElementById('answer-input');
     input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(level); });
+    const toolsHost = document.getElementById('answer-tools-host');
+    answerTools = (toolsHost && useTools) ? mountAnswerToolbar(input, toolsHost) : null;
     input.focus();
 
     // הזדמנות אופציונלית לנושא להריץ אפקט חי בזמן שהשלב פתוח (למשל שעון
@@ -280,9 +287,16 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     document.getElementById('hints-count').textContent = state.hintsShown;
     document.getElementById('hint-list').innerHTML = hints.slice(0, state.hintsShown)
       .map(h => `<div class="hint-item"><span class="dot"></span><span class="text">${h}</span></div>`).join('');
+    revealNearest(card);
+  }
+
+  // מגלל (בעדינות) כך שהמשוב/הרמזים יהיו גלויים גם במסך נמוך שבו שורת הלחצנים דוחקת אותם למטה
+  function revealNearest(el) {
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   function checkAnswer(level) {
+    if (state.solvedLock) return;
     cleanupLevel();
     const input = document.getElementById('answer-input');
     const fb = document.getElementById('qa-feedback');
@@ -291,11 +305,15 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // אפסים מובילים משמעותיים, או תווים לא-מספריים כמו A-F) - level.question
     // ולא topic, כי אותו topic יכול לערבב שני הסוגים בין שלביו.
     const textMode = level.question.inputMode === 'text';
-    const val = textMode ? input.value.trim() : parseFloat(input.value);
-    const invalid = textMode ? !val : Number.isNaN(val);
+    // מספרי: מספר רגיל, כתיב מדעי או ביטוי (כפל/חילוק/שבר/חזקה) - ראו answerInput.js
+    const parsed = textMode ? null : parseAnswer(input.value);
+    const val = textMode ? input.value.trim() : (parsed.ok ? parsed.value : NaN);
+    const invalid = textMode ? !val : !parsed.ok;
     if (invalid) {
+      const msg = textMode ? 'נא להזין תשובה.' : (parsed.error || 'נא להזין מספר תקין.');
       fb.className = 'qa-feedback bad show';
-      fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${textMode ? 'נא להזין תשובה.' : 'נא להזין מספר תקין.'}</span>`;
+      fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${msg}</span>`;
+      revealNearest(fb);
       return;
     }
 
@@ -317,6 +335,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback bad show';
     fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${result.message || '⚡ לא מדויק. בדקו שוב את הנוסחה ונסו שוב.'}</span>`;
+    revealNearest(fb);
     const stage = document.getElementById('circuit-stage');
     if (stage) {
       if (topic.animateIncorrect) topic.animateIncorrect(stage, level, result);
@@ -357,6 +376,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
   async function handleSuccess(level) {
     playSuccess();
+    // נועלים מיד (לפני ה-await של השמירה): בלי זה Enter/לחיצה נוספת בזמן השמירה הייתה נספרת שוב
+    state.solvedLock = true;
+    const submitBtn = document.getElementById('submit-answer');
+    const answerEl = document.getElementById('answer-input');
+    if (submitBtn) submitBtn.disabled = true;
+    if (answerEl) answerEl.disabled = true;
+    if (answerTools) answerTools.disable();
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback ok show';
     const elapsed = Math.round((performance.now() - state.startTs) / 1000);
@@ -399,9 +425,11 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     row.innerHTML = `<button id="next-level" class="ground">${hasNext ? 'לשלב הבא →' : finishLabel}</button><button id="retry-level" class="secondary">לנסות שוב</button>`;
     document.getElementById('submit-answer').disabled = true;
     document.getElementById('answer-input').disabled = true;
+    if (answerTools) answerTools.disable();
     document.getElementById('next-level').addEventListener('click', () => {
       if (hasNext) openLevel(level.id + 1); else onBack();
     });
     document.getElementById('retry-level').addEventListener('click', () => openLevel(level.id));
+    document.getElementById('next-level').focus({ preventScroll: false }); // הפוקוס עובר ל"לשלב הבא" (המקלדת/קורא מסך)
   }
 }
