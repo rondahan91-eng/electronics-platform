@@ -163,7 +163,8 @@ export async function mountHome(app, session, onLogout) {
           levelStart: parseInt(d.start, 10), levelEnd: parseInt(d.end, 10),
           chapterN: d.chapterN, chapterTitle: d.chapterTitle, n: d.subN, title: d.subTitle, color: d.color,
         };
-        mountTopic(app, session, topic, () => mountHome(app, session, onLogout), onLogout, { subtopic });
+        mountTopic(app, session, topic, () => mountHome(app, session, onLogout), onLogout,
+          { subtopic, knownTopicIds: Object.keys(TOPICS) });
       });
     });
   }

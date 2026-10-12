@@ -36,11 +36,25 @@ import {
 import { fmtTime } from './ui.js';
 import { STATIC_CHARGE_FORMULAS } from './game/staticChargeFormulas.js';
 
-/** הודעת הצלחה של 'static-charge': משפט אחד, נגזר מהשלב (סימן הכוח / סוג האינטראקציה).
+/** מספר להצגה: מספרים קטנים/גדולים מאוד בכתיב מדעי (4×10⁻⁴), אחרת כמו שהוא. */
+const SUP_DIGITS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' };
+function fmtNum(x) {
+  const sign = x < 0 ? '−' : '';
+  const a = Math.abs(x);
+  if (a !== 0 && (a < 0.01 || a >= 1e5)) {
+    let exp = Math.floor(Math.log10(a));
+    let mant = Number((a / 10 ** exp).toPrecision(3));
+    if (mant >= 10) { mant = 1; exp += 1; }
+    return `${sign}${mant}×10${String(exp).split('').map(c => SUP_DIGITS[c] || c).join('')}`;
+  }
+  return `${sign}${a}`;
+}
+
+/** הודעת הצלחה של 'static-charge-v2': משפט אחד, נגזר מהשלב (סימן הכוח / סוג האינטראקציה).
  * הערך עטוף ב-LTR כי gameEngine מזריק את ההודעה כ-HTML בתוך טקסט RTL. */
 function staticChargeSuccessMessage(level) {
   const q = level.question, w = level.world;
-  const val = `<span dir="ltr">${String(q.answer).replace('-', '−')} ${q.unit.trim()}</span>`;
+  const val = `<span dir="ltr">${fmtNum(q.answer)} ${q.unit.trim()}</span>`;
   switch (w.unknown) {
     case 'force':
       return `✅ מדויק! הכוח הוא ${val} - ${w.interaction === 'attract'
@@ -51,7 +65,7 @@ function staticChargeSuccessMessage(level) {
       return `✅ מדויק! המרחק קטן פי ${k}, ולכן הכוח גדל פי ${k * k} ועומד על ${val}.`;
     }
     case 'electron_count':
-      return `✅ מדויק! ${q.answer}${q.unit} אלקטרונים עברו מהשיער אל הבלון, והבלון נטען שלילית.`;
+      return `✅ מדויק! <span dir="ltr">${fmtNum(q.answer)}</span> אלקטרונים עברו מהשיער אל הבלון, והבלון נטען שלילית.`;
     case 'field':
       return `✅ מדויק! השדה החשמלי של הבלון במקום הזרם הוא ${val}, והוא מצביע אל הבלון השלילי.`;
     case 'source_charge':
@@ -59,7 +73,7 @@ function staticChargeSuccessMessage(level) {
     case 'distance':
       return `✅ מדויק! הבלון נמצא במרחק ${val} מהקיר, והכוח ביניהם הוא כוח משיכה.`;
     case 'min_source_charge':
-      return `✅ מדויק! כשמטען הסרגל הוא ${val} לפחות, הכוח החשמלי מגיע למשקל הנייר, ומעבר לזה הנייר מתרומם.`;
+      return `✅ מדויק! כשגודל מטען הסרגל הוא ${val} לפחות, הכוח החשמלי מגיע למשקל הנייר, ומעבר לזה הנייר מתרומם.`;
     case 'force_over_weight':
       return `✅ מדויק! הכוח החשמלי גדול פי ${q.answer} ממשקל הטיפה, ולכן הזרם מתכופף אל הבלון.`;
     default:
@@ -68,8 +82,8 @@ function staticChargeSuccessMessage(level) {
 }
 
 export const TOPICS = {
-  'static-charge': {
-    id: 'static-charge',
+  'static-charge-v2': {
+    id: 'static-charge-v2',
     title: 'מטען, כוח ושדה חשמלי',
     subtitle: 'ניסויי חשמל סטטי פשוטים: סרגל ונייר, בלון וקיר, בלון וזרם מים',
     color: '#ffcc33',
@@ -79,6 +93,8 @@ export const TOPICS = {
     evaluateAnswer: evaluateStaticChargeAnswer,
     successMessage: staticChargeSuccessMessage,
     formulas: STATIC_CHARGE_FORMULAS,
+    progression: 'בלי המרות → המרת נתון אחד → המרת תשובה → המרת כמה נתונים',
+    formatAnswer: level => `${fmtNum(level.question.answer)} ${level.question.unit.trim()}`,
     // אין clearDisqualifyMarks / triggerDisqualifyAnimation / animateIncorrect /
     // onLevelMount - אין פסילה ואין שעון עוצר בנושא הזה (ראו staticChargeLevelGenerator.js);
     // תשובה שגויה = ריטוט ברירת המחדל של gameEngine.js.
@@ -195,7 +211,7 @@ export const ALL_TOPIC_IDS = Object.keys(TOPICS);
  * נתון עריך שנשמר לכל שכבה (topicIds) ומנוהל דרך פאנל הניהול.
  */
 export const DEFAULT_CURRICULA = {
-  'י': ['static-charge', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
+  'י': ['static-charge-v2', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
   'יא': [], // אין עדיין אף topic בנוי לתוכן כיתה י"א (ראו syllabus.js - הכל "קר").
 };
 

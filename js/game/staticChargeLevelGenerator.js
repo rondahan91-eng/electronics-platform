@@ -1,7 +1,8 @@
 // ==========================================================================
-// staticChargeLevelGenerator.js - "מטען, כוח ושדה חשמלי" (פרק 1): 10 שלבים
-// בנוסח ניסויי חשמל סטטי פשוטים (סרגל ונייר, בלון וקיר, בלון וזרם מים).
-// מחליף את הדמיית החללית והאסטרואידים הקודמת.
+// staticChargeLevelGenerator.js - "מטען, כוח ושדה חשמלי" (פרק 1): 16 שלבים
+// בנוסח ניסויי חשמל סטטי פשוטים (סרגל ונייר, בלון וקיר, בלון וזרם מים), עם מדרגת המרות יחידות:
+//   1-5 בלי המרות כלל (נתונים ותשובה ב-SI) | 6-8 נתון אחד להמרה בכל שלב (Q, אחר כך r, אחר כך q) |
+//   9-10 המרה בתשובה בלבד | 11-16 המרה של כמה נתונים (ובתשובה). ראו NOTE_* ו-staticChargeFormulas.js.
 //
 // כל תשובה ו"מלכודת" מחושבות מערכי הנתונים עצמם (ערך SI שנגזר מהטקסט המוצג
 // בשורת הנתון) באמצעות electroEngine.js (KC, coulombForceSigned, electricField,
@@ -13,9 +14,9 @@
 //   world: {
 //     scene:   'ruler_paper' | 'balloon_wall' | 'water_balloon',
 //     variant: 'basic'          // המצב הרגיל של הסצנה
-//            | 'touched'        // שלב 3: פיסת הנייר נגעה בסרגל - סימני − על הנייר
+//            | 'touched'        // שלבים 2, 8: פיסת הנייר נגעה בסרגל - סימני − על הנייר
 //            | 'hair_patch'     // שלב 5: טלאי שיער קטן עם סימני + בפינה
-//            | 'two_distances', // שלב 4: בלון מלא רחוק (r) + בלון רפאים קרוב (r')
+//            | 'two_distances', // שלב 3: בלון מלא רחוק (r) + בלון רפאים קרוב (r')
 //     source:  { kind: 'ruler' | 'balloon', sign: -1 },   // הגוף הטעון (תמיד שלילי)
 //     target:  { kind: 'paper' | 'wall' | 'drop', sign: +1 | -1 } | null,
 //              // sign = סימן המטען בצד הקרוב של המטרה (נייר/קיר/טיפה).
@@ -23,16 +24,16 @@
 //     interaction: 'attract' | 'repel' | null, // נגזר מסימני source/target; null כש-target=null
 //     unknown: 'force' | 'force_new_distance' | 'electron_count' | 'field'
 //            | 'source_charge' | 'distance' | 'min_source_charge' | 'force_over_weight',
-//     signed:  boolean,         // true = התשובה חתומה (חיובי=דחייה, שלילי=משיכה): שלבים 1-3
+//     signed:  boolean,         // true = התשובה חתומה (חיובי=דחייה, שלילי=משיכה): שלבים 1, 2, 6, 7, 8, 9, 11, 12
 //     show: { r: boolean,       // האם מצוייר סמן המרחק r (שלב 5: false)
-//             rPrime: boolean,  // שלב 4 בלבד: סמן r' + בלון רפאים
+//             rPrime: boolean,  // שלב 3 בלבד: סמן r' + בלון רפאים
 //             hairPatch: boolean },
-//     geometry: { rFarRel: 1, rNearRel: number } | null, // שלב 4: יחס מרחקים לציור (קרוב/רחוק = 1/3)
+//     geometry: { rFarRel: 1, rNearRel: number } | null, // שלב 3: יחס מרחקים לציור (קרוב/רחוק = 1/3)
 //     success: {                // מה להציג רק ב-render(level, true)
 //       anim: string,           // שם האנימציה (ראו successAnim בכל שלב)
 //       arrows: [{ kind: 'force' | 'weight', lengthRel: number }], // חצי כוח/משקל (אורך יחסי)
-//       fieldLines: boolean,    // קווי שדה מקווקווים (שלבים 6, 10)
-//       deflectionDeg: number | null, // שלב 10: סטיית הזרם מהאנכי (מעלות)
+//       fieldLines: boolean,    // קווי שדה מקווקווים (שלבים 4, 10, 16)
+//       deflectionDeg: number | null, // שלב 16: סטיית הזרם מהאנכי (מעלות)
 //     },
 //   },
 //   question: { prompt (HTML: סיפור, <br>, שאלה - בלי ספרות), data: [{label, value}],
@@ -47,7 +48,7 @@ import { CONFIG } from '../config.js';
 // g אינו ב-electroEngine.js ("נוסחאות בתוכנית": g = 10). e מגיע משורת הנתון בשלב 5.
 const G = 10; // m/s²
 // מכפילי יחידות SI (CM מגיע מהמנוע).
-const NC = 1e-9, MM = 1e-3, MG = 1e-6 /* mg → kg */, MN = 1e-3, UN = 1e-6, BILLION = 1e9, KILO = 1e3;
+const NC = 1e-9, MM = 1e-3, MN = 1e-3, UN = 1e-6, KILO = 1e3;
 
 // ---------------------------------------------------------------- עזרי בסיס
 /** עיגול ל-6 ספרות משמעותיות - מנקה רעש נקודה צפה (למשל -0.40000000000000002). */
@@ -93,38 +94,300 @@ const DESC_RULER = 'הנייר ניטרלי, אבל הסרגל השלילי דו
 const DESC_WALL = 'הבלון שחיככו בשיער קיבל אלקטרונים ונטען שלילית. הקיר ניטרלי, אבל בפניו מול הבלון נוצר מטען חיובי, ולכן הבלון נמשך אליו. נתייחס אליהם כשני מטענים נקודתיים במרחק r.';
 const DESC_WATER = 'זרם המים מחובר לברז. הבלון השלילי דוחף אלקטרונים במעלה הזרם, ולכן הטיפות שנופלות נשארות חיוביות והזרם מתכופף אל הבלון. נתייחס לבלון ולטיפה כשני מטענים נקודתיים.';
 
+// הערות "מדרגת המרות" שמתווספות להסבר המתקפל לפי סוג השלב (בלי מספרים, ובלי לומר איזה נתון להמיר -
+// זה תפקיד הרמזים).
+const NOTE_C0 = ' בשלב הזה כל הנתונים כבר ביחידות SI והתשובה מבוקשת ביחידת SI, ולכן אין צורך בהמרות.';
+const NOTE_D1 = ' בשלב הזה אחד הנתונים אינו ביחידת SI.';
+const NOTE_A = ' בשלב הזה כל הנתונים ב-SI. שימו לב ליחידה שבה מבוקשת התשובה.';
+const NOTE_DM = ' בשלב הזה כמה מהנתונים אינם ביחידת SI.';
+const NOTE_DM_PURE = ' בשלב הזה כמה מהנתונים אינם ביחידת SI. התשובה היא מספר טהור (יחס).';
+
 const forcePair = (anim, extra = {}) => ({ anim, arrows: [{ kind: 'force', lengthRel: 1 }], fieldLines: false, deflectionDeg: null, ...extra });
 
 const LEVEL_DEFS = [
-  // 1 - ruler_paper: הצבה ישירה בחוק קולון, הכול כבר ב-SI. תשובה חתומה (משיכה).
+  // ===== שלבים 1-5: בלי המרות יחידות. כל הנתונים וגם התשובה ביחידות SI (כתיב מדעי מותר) =====
+  // 1 - ruler_paper: הצבה ישירה בחוק קולון. תשובה חתומה (משיכה), בניוטון.
   {
-    scene: 'ruler_paper', title: 'סרגל ופיסת נייר', desc: DESC_RULER_SETUP,
+    scene: 'ruler_paper', title: 'סרגל ופיסת נייר', desc: DESC_RULER_SETUP + NOTE_C0,
     story: 'סרגל שחיככו בצמר מעל פיסת נייר.',
     ask: `מהו הכוח בין הסרגל לנייר? ${SIGN_NOTE}`,
-    unit: 'mN', signed: true, unknown: 'force', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k'],
+    unit: 'N', signed: true, unknown: 'force', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k'],
     data: [
       datum('Q', 'מטען הסרגל Q', -2, 'C', -8, { sci: true }),
       datum('q', 'מטען בצד הקרוב של הנייר q', 2, 'C', -9, { sci: true, sign: true }),
       datum('r', 'מרחק r', 0.03, 'm', 0),
     ],
-    compute: v => coulombForceSigned(v.Q, v.q, v.r) / MN,
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
     traps: [
       { f: (v, a) => -a, msg: 'הסימן נשמט. סרגל שלילי ומטען חיובי בצד הקרוב של הנייר הם מטענים מנוגדים, ולכן משיכה (שלילי).' },
-      { f: v => KC * v.Q * v.q / v.r / MN, msg: 'שכחתם לרבע את r. בחוק קולון המרחק מופיע בריבוע: r².' },
-      { f: v => coulombForceSigned(v.Q, v.q, v.r), msg: 'החישוב נכון, אבל התוצאה נשארה בניוטון. התבקשה תשובה ב-mN (כפלו ב-1000).' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק מופיע בריבוע: r².' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r) / 1e9, msg: 'k הוא 9×10⁹ ולא 9. שכחתם את החזקה של הקבוע.' },
+      { f: (v, a) => a * 1000, msg: 'התבקשה תשובה בניוטון (N). אין צורך להמיר ליחידה אחרת בשלב הזה.' },
     ],
     hints: [
       'חוק קולון: F = k·Q·q / r², עם k = 9×10⁹ N·m²/C². הציבו את שני המטענים כולל הסימן שלהם.',
       'מכפלה שלילית של המטענים = משיכה = כוח שלילי. מכפלה חיובית = דחייה = כוח חיובי.',
-      'הנתונים כבר ב-SI, לכן התוצאה בניוטון. בדקו בדרך: k·Q·q = −3.6×10⁻⁷. כדי לעבור מ-N ל-mN כפלו ב-1000.',
+      'בדקו בדרך: k·Q·q = −3.6×10⁻⁷ ו-r² = 9×10⁻⁴. התוצאה בניוטון (N). אפשר להקליד אותה בכתיב מדעי, למשל 2.5e-3.',
     ],
     success: () => forcePair('paper_jumps_to_ruler'),
   },
-  // 2 - balloon_wall: המרות nC, cm + הצבה בחוק קולון עם סימן (משיכה).
+  // 2 - ruler_paper (אחרי מגע): מטענים באותו סימן = דחייה (חיובי). בניוטון.
   {
-    scene: 'balloon_wall', title: 'בלון ליד קיר', desc: DESC_WALL_SETUP,
+    scene: 'ruler_paper', variant: 'touched', title: 'נייר שנגע בסרגל',
+    desc: 'כשהנייר נוגע בסרגל עוברים אליו אלקטרונים, והוא נטען מאותו סוג של מטען כמו הסרגל. נתייחס אליהם כשני מטענים נקודתיים במרחק r.' + NOTE_C0,
+    story: 'פיסת נייר נגעה בסרגל וקיבלה ממנו מטען.',
+    ask: `מהו הכוח בין הסרגל לנייר? ${SIGN_NOTE}`,
+    unit: 'N', signed: true, unknown: 'force', source: RULER, target: PAPER_TOUCHED, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הסרגל Q', -2, 'C', -8, { sci: true }),
+      datum('q', 'מטען הנייר אחרי המגע q', -5, 'C', -9, { sci: true }),
+      datum('r', 'מרחק r', 0.015, 'm', 0),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
+    traps: [
+      { f: (v, a) => -a, msg: 'שני המטענים שליליים, ומטענים באותו סימן דוחים זה את זה. הכוח חיובי.' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r) / 1e9, msg: 'k הוא 9×10⁹ ולא 9. שכחתם את החזקה של הקבוע.' },
+      { f: (v, a) => a * 1000, msg: 'התבקשה תשובה בניוטון (N). אין צורך להמיר ליחידה אחרת בשלב הזה.' },
+    ],
+    hints: [
+      'השוו את הסימנים של שני המטענים. מה קורה בין שני מטענים כשהסימנים שלהם זהים?',
+      'שני מטענים באותו סימן: המכפלה חיובית, כלומר דחייה וכוח חיובי.',
+      'בדקו בדרך: k·Q·q = +9×10⁻⁷ ו-r² = 2.25×10⁻⁴. התוצאה בניוטון.',
+    ],
+    success: () => forcePair('paper_thrown_away'),
+  },
+  // 3 - water_balloon: חוק הריבוע ההפוך כיחס, בלי מטענים. גודל חיובי, ב-SI.
+  {
+    scene: 'water_balloon', variant: 'two_distances', title: 'בלון מתקרב לזרם מים', desc: DESC_WATER + NOTE_C0,
+    story: 'מקרבים בלון טעון אל זרם מים, ומטען הטיפה לא משתנה.',
+    ask: 'מהו גודל הכוח על הטיפה כשהבלון קרוב?',
+    unit: 'N', signed: false, unknown: 'force_new_distance', source: BALLOON, target: DROP_PLUS,
+    show: { rPrime: true },
+    geometry: v => ({ rFarRel: 1, rNearRel: sig(v.rNear / v.rFar) }),
+    data: [
+      datum('F1', 'הכוח על הטיפה כשהבלון רחוק', 2, 'N', -5, { sci: true }),
+      datum('rFar', 'מרחק כשהבלון רחוק', 0.06, 'm', 0),
+      datum('rNear', 'מרחק כשהבלון קרוב', 0.02, 'm', 0),
+    ],
+    compute: v => v.F1 * (v.rFar / v.rNear) ** 2,
+    traps: [
+      { f: v => v.F1 * (v.rFar / v.rNear), msg: 'הכוח גדל פי 3 בלבד. הכוח הפוך ל-r², לכן צריך לרבע את יחס המרחקים (פי 9).' },
+      { f: v => v.F1 / (v.rFar / v.rNear) ** 2, msg: 'הפכתם את היחס. כשהבלון מתקרב הכוח גדל, הוא לא קטן.' },
+      { f: v => v.F1 / (v.rFar / v.rNear), msg: 'חילקתם ב-3. כשהבלון מתקרב הכוח גדל (ובריבוע), הוא לא קטן.' },
+    ],
+    hints: [
+      'בחוק קולון הכוח הפוך ל-r² (F ∝ 1/r²). המטענים לא השתנו, לכן הכוח משתנה רק בגלל המרחק.',
+      'בכמה קטן המרחק? מ-0.06 m ל-0.02 m, כלומר פי 3. הכוח משתנה בריבוע של היחס הזה, ובכיוון ההפוך: קרוב יותר = חזק יותר.',
+      'F₂ = F₁ · (r₁ / r₂)². המרחקים באותה יחידה, והתוצאה באותה יחידה כמו F₁.',
+    ],
+    success: () => forcePair('balloon_slides_near_stream_bends'),
+  },
+  // 4 - water_balloon: שדה חשמלי E = k|Q|/r², ב-SI (N/C). אין חץ כוח - קווי שדה בהצלחה.
+  {
+    scene: 'water_balloon', title: 'שדה חשמלי ליד זרם מים', desc: DESC_WATER + NOTE_C0,
+    story: 'בלון טעון עומד ליד זרם מים.',
+    ask: 'מהו גודל השדה החשמלי של הבלון במקום שבו עובר הזרם?',
+    unit: 'N/C', signed: false, unknown: 'field', source: BALLOON, target: DROP_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הבלון Q', -2.5, 'C', -8, { sci: true }),
+      datum('r', 'מרחק מהזרם r', 0.05, 'm', 0),
+    ],
+    compute: v => electricField(v.Q, v.r),
+    traps: [
+      { f: v => KC * Math.abs(v.Q) / v.r, msg: 'שכחתם לרבע את r. בנוסחת השדה המרחק בריבוע.' },
+      { f: v => electricField(v.Q, v.r) / 1e9, msg: 'k הוא 9×10⁹ ולא 9. שכחתם את החזקה של הקבוע.' },
+    ],
+    hints: [
+      'שדה חשמלי של מטען נקודתי: E = k·|Q| / r², עם k = 9×10⁹. מחשבים גודל, בלי הסימן של Q. (בהמשך נשתמש בו: הכוח על מטען q בשדה E הוא F = q·E.)',
+      'Q בקולון ו-r במטרים. שימו לב: r מופיע בריבוע.',
+      'בדקו בדרך: k·|Q| = 225 ו-r² = 2.5×10⁻³. התוצאה ב-N/C.',
+    ],
+    success: () => ({ anim: 'field_lines_stream_bends_slightly', arrows: [], fieldLines: true, deflectionDeg: null }),
+  },
+  // 5 - balloon_wall (טלאי שיער): Q = N·e. הכול ב-SI (Q בקולון), התשובה מספר טהור בכתיב מדעי.
+  {
+    scene: 'balloon_wall', variant: 'hair_patch', title: 'ספירת אלקטרונים בבלון',
+    desc: 'בחיכוך עוברים אלקטרונים מהשיער אל הבלון, והבלון נטען שלילית. המטען הכולל שווה למספר האלקטרונים כפול מטען של אלקטרון אחד.' + NOTE_C0,
+    story: 'בלון נחכך בשיער ולקח ממנו אלקטרונים.',
+    ask: 'כמה אלקטרונים עברו מהשיער אל הבלון?',
+    unit: 'אלקטרונים', signed: false, unknown: 'electron_count', source: BALLOON, target: null,
+    show: { r: false, hairPatch: true },
+    data: [
+      datum('Q', 'מטען הבלון Q', -3.2, 'C', -8, { sci: true }),
+      datum('e', 'גודל מטען האלקטרון e', 1.6, 'C', -19, { sci: true }),
+    ],
+    // e נלקח משורת הנתון עצמה (אותו ערך שהתלמיד רואה) - אין קבוע כפול.
+    compute: v => Math.abs(v.Q) / v.e,
+    traps: [
+      { f: v => Math.abs(v.Q) / 1.6, msg: 'שכחתם את החזקה של e. e הוא 1.6×10⁻¹⁹ C ולא 1.6.' },
+      { f: v => Math.abs(v.Q) / v.e / 10, msg: 'טעות של פי 10 בחזקות. בדקו שוב את החילוק 10⁻⁸ / 10⁻¹⁹.' },
+      { f: v => Math.abs(v.Q) / v.e * 1000, msg: 'טעות של פי 1000 בחזקות. בדקו שוב את החילוק 10⁻⁸ / 10⁻¹⁹: מחסרים חזקות.' },
+    ],
+    hints: [
+      'המטען הכולל הוא מספר האלקטרונים כפול מטען של אלקטרון אחד: |Q| = N·e. לכן N = |Q| / e.',
+      'משתמשים בגודל המטען, בלי הסימן: |Q| = 3.2×10⁻⁸ C.',
+      'חלקו |Q| ב-e ובדקו את החזקות: 10⁻⁸ / 10⁻¹⁹ = 10¹¹. את התוצאה מקלידים בכתיב מדעי, למשל 5e9.',
+    ],
+    success: () => ({ anim: 'electrons_hop_to_balloon', arrows: [], fieldLines: false, deflectionDeg: null }),
+  },
+  // ===== שלבים 6-8: המרת יחידות לנתון אחד בכל פעם: Q, אחר כך r, אחר כך q (שאר הנתונים והתשובה ב-SI) =====
+  // 6 - balloon_wall: המטען Q נתון ב-nC (נתון אחד להמרה). תשובה חתומה (משיכה), בניוטון.
+  {
+    scene: 'balloon_wall', title: 'בלון ליד קיר', desc: DESC_WALL_SETUP + NOTE_D1,
     story: 'בלון שחיככו בשיער ליד קיר.',
     ask: `מהו הכוח בין הבלון לקיר? ${SIGN_NOTE}`,
+    unit: 'N', signed: true, unknown: 'force', source: BALLOON, target: WALL_NEAR_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הבלון Q', -50, 'nC', -9),
+      datum('q', 'מטען בקיר מול הבלון q', 2, 'C', -9, { sci: true, sign: true }),
+      datum('r', 'מרחק r', 0.03, 'm', 0),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
+    traps: [
+      { f: (v, a) => -a, msg: 'הסימן נשמט. בלון שלילי ומטען חיובי בקיר מושכים זה את זה, ולכן הכוח שלילי.' },
+      { f: v => coulombForceSigned(v.Q / NC, v.q, v.r), msg: 'Q נשאר ב-nC. המירו ל-C (1 nC = 10⁻⁹ C) לפני ההצבה.' },
+      { f: v => coulombForceSigned(v.Q / NC * UN, v.q, v.r), msg: 'המרת nC שגויה. 1 nC = 10⁻⁹ C ולא 10⁻⁶ C.' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
+    ],
+    hints: [
+      'חוק קולון: F = k·Q·q / r². רק Q נתון ב-nC: ממירים רק אותו ל-C לפני ההצבה.',
+      '1 nC = 10⁻⁹ C, לכן Q = −50×10⁻⁹ C = −5×10⁻⁸ C. שאר הנתונים כבר ב-SI, והתוצאה בניוטון.',
+      'בדקו בדרך: k·Q·q = −9×10⁻⁷ ו-r² = 9×10⁻⁴. התוצאה בניוטון, בלי המרה נוספת.',
+    ],
+    success: () => forcePair('balloon_slides_to_wall'),
+  },
+  // 7 - ruler_paper: המרחק r נתון ב-cm (נתון אחד להמרה). תשובה חתומה (משיכה), בניוטון.
+  {
+    scene: 'ruler_paper', title: 'סרגל קרוב לנייר', desc: DESC_RULER_SETUP + NOTE_D1,
+    story: 'סרגל טעון קרוב מאוד לפיסת נייר.',
+    ask: `מהו הכוח החשמלי שפועל על הנייר? ${SIGN_NOTE}`,
+    unit: 'N', signed: true, unknown: 'force', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הסרגל Q', -1, 'C', -8, { sci: true }),
+      datum('q', 'מטען בצד הקרוב של הנייר q', 3, 'C', -9, { sci: true, sign: true }),
+      datum('r', 'מרחק r', 3, 'cm', -2),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
+    traps: [
+      { f: (v, a) => -a, msg: 'הסימן נשמט. סרגל שלילי ומטען חיובי בצד הקרוב של הנייר הם מטענים מנוגדים, ולכן משיכה (שלילי).' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r / CM), msg: 'r נשאר בס"מ. המירו ס"מ למטרים (1 cm = 10⁻² m) לפני ההצבה.' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r / CM * MM), msg: 'המרת ס"מ למטרים שגויה. 1 cm = 10⁻² m ולא 10⁻³ m.' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
+    ],
+    hints: [
+      'חוק קולון: F = k·Q·q / r². רק המרחק נתון בסנטימטרים: ממירים רק אותו למטרים לפני ההצבה.',
+      '1 cm = 10⁻² m, לכן r = 3 cm = 0.03 m. המטענים כבר ב-C, והתוצאה בניוטון.',
+      'בדקו בדרך: k·Q·q = −2.7×10⁻⁷ ו-r² = 9×10⁻⁴. התוצאה בניוטון, בלי המרה נוספת.',
+    ],
+    success: () => forcePair('paper_jumps_to_ruler'),
+  },
+  // 8 - ruler_paper (אחרי מגע): המטען q נתון ב-nC (נתון אחד להמרה). דחייה, בניוטון.
+  {
+    scene: 'ruler_paper', variant: 'touched', title: 'נייר טעון ליד הסרגל',
+    desc: 'כשהנייר נוגע בסרגל עוברים אליו אלקטרונים, והוא נטען מאותו סוג של מטען כמו הסרגל. נתייחס אליהם כשני מטענים נקודתיים במרחק r.' + NOTE_D1,
+    story: 'פיסת נייר שנגעה בסרגל מוחזקת במרחק קטן ממנו.',
+    ask: `מהו הכוח הפועל על הנייר? ${SIGN_NOTE}`,
+    unit: 'N', signed: true, unknown: 'force', source: RULER, target: PAPER_TOUCHED, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הסרגל Q', -3, 'C', -8, { sci: true }),
+      datum('q', 'מטען הנייר אחרי המגע q', -2, 'nC', -9),
+      datum('r', 'מרחק r', 0.03, 'm', 0),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
+    traps: [
+      { f: (v, a) => -a, msg: 'שני המטענים שליליים, ומטענים באותו סימן דוחים זה את זה. הכוח חיובי.' },
+      { f: v => coulombForceSigned(v.Q, v.q / NC, v.r), msg: 'q נשאר ב-nC. המירו ל-C (1 nC = 10⁻⁹ C) לפני ההצבה.' },
+      { f: v => coulombForceSigned(v.Q, v.q / NC * UN, v.r), msg: 'המרת nC שגויה. 1 nC = 10⁻⁹ C ולא 10⁻⁶ C.' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
+    ],
+    hints: [
+      'חוק קולון: F = k·Q·q / r². רק המטען q של הנייר נתון ב-nC: ממירים רק אותו ל-C לפני ההצבה.',
+      '1 nC = 10⁻⁹ C, לכן q = −2×10⁻⁹ C. שני המטענים שליליים, ולכן מכפלתם חיובית: דחייה.',
+      'בדקו בדרך: k·Q·q = +5.4×10⁻⁷ ו-r² = 9×10⁻⁴. התוצאה בניוטון.',
+    ],
+    success: () => forcePair('paper_thrown_away'),
+  },
+  // ===== שלבים 9-10: המרת יחידות לתשובה (כל הנתונים ב-SI, התשובה ביחידה אחרת) =====
+  // 9 - balloon_wall: כל הנתונים ב-SI, התשובה ב-mN. תשובה חתומה (משיכה).
+  {
+    scene: 'balloon_wall', title: 'בלון על הקיר', desc: DESC_WALL_SETUP + NOTE_A,
+    story: 'בלון שחיככו בשיער צמוד כמעט לקיר.',
+    ask: `מהו הכוח שהקיר מפעיל על הבלון? ${SIGN_NOTE}`,
+    unit: 'mN', signed: true, unknown: 'force', source: BALLOON, target: WALL_NEAR_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הבלון Q', -5, 'C', -8, { sci: true }),
+      datum('q', 'מטען בקיר מול הבלון q', 3, 'C', -9, { sci: true, sign: true }),
+      datum('r', 'מרחק r', 0.03, 'm', 0),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r) / MN,
+    traps: [
+      { f: v => coulombForceSigned(v.Q, v.q, v.r), msg: 'החישוב נכון, אבל התוצאה נשארה בניוטון. התבקשה תשובה ב-mN (כפלו ב-1000).' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r) * MN, msg: 'המרה בכיוון ההפוך. מ-N ל-mN מכפילים ב-1000, לא מחלקים.' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r) / UN, msg: 'המרת mN שגויה. 1 mN = 10⁻³ N (לא 10⁻⁶).' },
+      { f: (v, a) => -a, msg: 'הסימן נשמט. בלון שלילי ומטען חיובי בקיר מושכים זה את זה, ולכן הכוח שלילי.' },
+    ],
+    hints: [
+      'חוק קולון: F = k·Q·q / r². מחשבים קודם בניוטון, עם הסימנים של המטענים.',
+      'התשובה מבוקשת ב-mN: ממירים את התוצאה בסוף. 1 mN = 10⁻³ N, ולכן מכפילים ב-1000.',
+      'בדקו בדרך: k·Q·q = −1.35×10⁻⁶ ו-r² = 9×10⁻⁴. התוצאה בניוטון צריכה להיות בסדר גודל של 10⁻³.',
+    ],
+    success: () => forcePair('balloon_slides_to_wall'),
+  },
+  // 10 - water_balloon: שדה חשמלי; כל הנתונים ב-SI, התשובה ב-kN/C. אין חץ כוח - קווי שדה בהצלחה.
+  {
+    scene: 'water_balloon', title: 'שדה הבלון בזרם המים', desc: DESC_WATER + NOTE_A,
+    story: 'בלון שחיככו בשיער מוצב ליד זרם מים.',
+    ask: 'מהו גודל השדה החשמלי בנקודה שבה עובר הזרם?',
+    unit: 'kN/C', signed: false, unknown: 'field', source: BALLOON, target: DROP_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הבלון Q', -4, 'C', -8, { sci: true }),
+      datum('r', 'מרחק מהזרם r', 0.06, 'm', 0),
+    ],
+    compute: v => electricField(v.Q, v.r) / KILO,
+    traps: [
+      { f: v => electricField(v.Q, v.r), msg: 'החישוב נכון, אבל התוצאה ב-N/C. התבקשה תשובה ב-kN/C (חלקו ב-1000).' },
+      { f: v => electricField(v.Q, v.r) * KILO, msg: 'המרה בכיוון ההפוך. מ-N/C ל-kN/C מחלקים ב-1000, לא מכפילים.' },
+      { f: v => KC * Math.abs(v.Q) / v.r / KILO, msg: 'שכחתם לרבע את r. בנוסחת השדה המרחק בריבוע.' },
+    ],
+    hints: [
+      'שדה חשמלי של מטען נקודתי: E = k·|Q| / r², עם k = 9×10⁹. התוצאה יוצאת ב-N/C.',
+      'התשובה מבוקשת ב-kN/C: מחלקים את התוצאה ב-N/C ב-1000 (1 kN/C = 10³ N/C).',
+      'בדקו בדרך: k·|Q| = 360 ו-r² = 3.6×10⁻³. התוצאה ב-N/C בסדר גודל של 10⁵.',
+    ],
+    success: () => ({ anim: 'field_lines_stream_bends_slightly', arrows: [], fieldLines: true, deflectionDeg: null }),
+  },
+  // ===== שלבים 11-16: המרת יחידות לכמה נתונים: קודם שניים (תשובה ב-SI), אחר כך שלושה ותשובה, ואז המיומנויות הקשות =====
+  // 11 - ruler_paper: שני נתונים להמרה (Q ב-nC, r ב-cm), q ב-SI, התשובה בניוטון. משיכה.
+  {
+    scene: 'ruler_paper', title: 'סרגל מעל נייר בקרבה', desc: DESC_RULER_SETUP + NOTE_DM,
+    story: 'סרגל שחיככו בצמר נמצא קרוב לפיסת נייר.',
+    ask: `מהו הכוח בין הסרגל לנייר? ${SIGN_NOTE}`,
+    unit: 'N', signed: true, unknown: 'force', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k'],
+    data: [
+      datum('Q', 'מטען הסרגל Q', -40, 'nC', -9),
+      datum('q', 'מטען בצד הקרוב של הנייר q', 2, 'C', -8, { sci: true, sign: true }),
+      datum('r', 'מרחק r', 6, 'cm', -2),
+    ],
+    compute: v => coulombForceSigned(v.Q, v.q, v.r),
+    traps: [
+      { f: (v, a) => -a, msg: 'הסימן נשמט. סרגל שלילי ומטען חיובי בצד הקרוב של הנייר הם מטענים מנוגדים, ולכן משיכה (שלילי).' },
+      { f: v => coulombForceSigned(v.Q / NC, v.q, v.r), msg: 'Q נשאר ב-nC. המירו ל-C (1 nC = 10⁻⁹ C) לפני ההצבה.' },
+      { f: v => coulombForceSigned(v.Q, v.q, v.r / CM), msg: 'r נשאר בס"מ. המירו ס"מ למטרים (1 cm = 10⁻² m) לפני ההצבה.' },
+      { f: v => KC * v.Q * v.q / v.r, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
+    ],
+    hints: [
+      'חוק קולון: F = k·Q·q / r². שני נתונים צריכים המרה ל-SI לפני ההצבה: המטען Q והמרחק r. המטען q כבר ב-C.',
+      '1 nC = 10⁻⁹ C ו-1 cm = 10⁻² m, לכן Q = −40×10⁻⁹ C = −4×10⁻⁸ C ו-r = 0.06 m.',
+      'בדקו בדרך: k·Q·q = −7.2×10⁻⁶ ו-r² = 3.6×10⁻³. התוצאה בניוטון.',
+    ],
+    success: () => forcePair('paper_jumps_to_ruler'),
+  },
+  // 12 - balloon_wall: Q ב-nC, q ב-nC, r ב-cm, התשובה ב-mN (משיכה).
+  {
+    scene: 'balloon_wall', title: 'בלון קרוב לקיר', desc: DESC_WALL_SETUP + NOTE_DM,
+    story: 'בלון טעון עומד קרוב מאוד לקיר.',
+    ask: `מהו הכוח ההדדי בין הבלון לקיר? ${SIGN_NOTE}`,
     unit: 'mN', signed: true, unknown: 'force', source: BALLOON, target: WALL_NEAR_PLUS, consts: ['k'],
     data: [
       datum('Q', 'מטען הבלון Q', -30, 'nC', -9),
@@ -137,6 +400,7 @@ const LEVEL_DEFS = [
       { f: v => KC * v.Q * v.q / v.r / MN, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
       { f: v => coulombForceSigned(v.Q, v.q, v.r / CM) / MN, msg: 'r נשאר בס"מ. המירו ס"מ למטרים (×10⁻²) לפני ההצבה.' },
       { f: v => coulombForceSigned(v.Q, v.q, v.r), msg: 'החישוב נכון, אבל התוצאה נשארה בניוטון. כפלו ב-1000 כדי לקבל mN.' },
+      { f: v => coulombForceSigned(v.Q / NC, v.q / NC, v.r) / MN, msg: 'Q ו-q נשארו ב-nC. המירו ל-C (1 nC = 10⁻⁹ C) לפני ההצבה.' },
     ],
     hints: [
       'המירו ל-SI לפני ההצבה: 1 nC = 10⁻⁹ C ו-1 cm = 10⁻² m.',
@@ -145,112 +409,9 @@ const LEVEL_DEFS = [
     ],
     success: () => forcePair('balloon_slides_to_wall'),
   },
-  // 3 - ruler_paper (אחרי מגע): מטענים באותו סימן = דחייה (חיובי), המרת mm.
+  // 13 - ruler_paper: בידוד Q מחוק קולון (המרות μN, nC, cm: כמה נתונים + תשובה). גודל חיובי.
   {
-    scene: 'ruler_paper', variant: 'touched', title: 'נייר שנגע בסרגל',
-    desc: 'כשהנייר נוגע בסרגל עוברים אליו אלקטרונים, והוא נטען מאותו סוג של מטען כמו הסרגל. נתייחס אליהם כשני מטענים נקודתיים במרחק r.',
-    story: 'פיסת נייר נגעה בסרגל וקיבלה ממנו מטען.',
-    ask: `מהו הכוח בין הסרגל לנייר? ${SIGN_NOTE}`,
-    unit: 'mN', signed: true, unknown: 'force', source: RULER, target: PAPER_TOUCHED, consts: ['k'],
-    data: [
-      datum('Q', 'מטען הסרגל Q', -20, 'nC', -9),
-      datum('q', 'מטען הנייר אחרי המגע q', -5, 'nC', -9),
-      datum('r', 'מרחק r', 15, 'mm', -3),
-    ],
-    compute: v => coulombForceSigned(v.Q, v.q, v.r) / MN,
-    traps: [
-      { f: (v, a) => -a, msg: 'שני המטענים שליליים, ומטענים באותו סימן דוחים זה את זה. הכוח חיובי.' },
-      { f: v => coulombForceSigned(v.Q, v.q, (v.r / MM) * CM) / MN, msg: 'המרת mm למטרים שגויה. 1 mm = 10⁻³ m ולא 10⁻² m.' },
-      { f: v => KC * v.Q * v.q / v.r / MN, msg: 'שכחתם לרבע את r. בחוק קולון המרחק בריבוע.' },
-      { f: v => coulombForceSigned(v.Q, v.q, v.r), msg: 'החישוב נכון, אבל התוצאה נשארה בניוטון. כפלו ב-1000 כדי לקבל mN.' },
-    ],
-    hints: [
-      'השוו את הסימנים של שני המטענים. מה קורה בין שני מטענים כשהסימנים שלהם זהים?',
-      'שני מטענים באותו סימן: המכפלה חיובית, כלומר דחייה וכוח חיובי. שימו לב: 1 mm = 10⁻³ m (לא 10⁻²).',
-      'r = 0.015 m, ולכן r² = 2.25×10⁻⁴. בדקו בדרך: k·Q·q = +9×10⁻⁷. התוצאה בניוטון, כפלו ב-1000 כדי לקבל mN.',
-    ],
-    success: () => forcePair('paper_thrown_away'),
-  },
-  // 4 - water_balloon: חוק הריבוע ההפוך כיחס, בלי מטענים. גודל חיובי.
-  {
-    scene: 'water_balloon', variant: 'two_distances', title: 'בלון מתקרב לזרם מים', desc: DESC_WATER,
-    story: 'מקרבים בלון טעון אל זרם מים, ומטען הטיפה לא משתנה.',
-    ask: 'מהו גודל הכוח על הטיפה כשהבלון קרוב?',
-    unit: 'μN', signed: false, unknown: 'force_new_distance', source: BALLOON, target: DROP_PLUS,
-    show: { rPrime: true },
-    geometry: v => ({ rFarRel: 1, rNearRel: sig(v.rNear / v.rFar) }),
-    data: [
-      datum('F1', 'הכוח על הטיפה כשהבלון רחוק', 20, 'μN', -6),
-      datum('rFar', 'מרחק כשהבלון רחוק', 6, 'cm', -2),
-      datum('rNear', 'מרחק כשהבלון קרוב', 2, 'cm', -2),
-    ],
-    compute: v => v.F1 * (v.rFar / v.rNear) ** 2 / UN,
-    traps: [
-      { f: v => v.F1 * (v.rFar / v.rNear) / UN, msg: 'הכוח גדל פי 3 בלבד. הכוח הפוך ל-r², לכן צריך לרבע את יחס המרחקים (פי 9).' },
-      { f: v => v.F1 / (v.rFar / v.rNear) ** 2 / UN, msg: 'הפכתם את היחס. כשהבלון מתקרב הכוח גדל, הוא לא קטן.' },
-      { f: v => v.F1 / (v.rFar / v.rNear) / UN, msg: 'חילקתם ב-3. כשהבלון מתקרב הכוח גדל (ובריבוע), הוא לא קטן.' },
-    ],
-    hints: [
-      'בחוק קולון הכוח הפוך ל-r² (F ∝ 1/r²). המטענים לא השתנו, לכן הכוח משתנה רק בגלל המרחק.',
-      'בכמה קטן המרחק? מ-6 cm ל-2 cm, כלומר פי 3. הכוח משתנה בריבוע של היחס הזה, ובכיוון ההפוך: קרוב יותר = חזק יותר.',
-      'F₂ = F₁ · (r₁ / r₂)². אין צורך בהמרת יחידות, כי יחס בין שני מרחקים לא תלוי ביחידה, והתשובה יוצאת ב-μN.',
-    ],
-    success: () => forcePair('balloon_slides_near_stream_bends'),
-  },
-  // 5 - balloon_wall (טלאי שיער): Q = N·e, חזקות של 10, מיליארדים. אין זוג גופים ואין סמן r.
-  {
-    scene: 'balloon_wall', variant: 'hair_patch', title: 'ספירת אלקטרונים בבלון',
-    desc: 'בחיכוך עוברים אלקטרונים מהשיער אל הבלון, והבלון נטען שלילית. המטען הכולל שווה למספר האלקטרונים כפול מטען של אלקטרון אחד.',
-    story: 'בלון נחכך בשיער ולקח ממנו אלקטרונים.',
-    ask: 'כמה אלקטרונים עברו מהשיער אל הבלון? (ענו במיליארדים)',
-    unit: ' מיליארד', signed: false, unknown: 'electron_count', source: BALLOON, target: null,
-    show: { r: false, hairPatch: true },
-    data: [
-      datum('Q', 'מטען הבלון', -24, 'nC', -9),
-      datum('e', 'גודל מטען האלקטרון e', 1.6, 'C', -19, { sci: true }),
-    ],
-    // e נלקח משורת הנתון עצמה (אותו ערך שהתלמיד רואה) - אין קבוע כפול.
-    compute: v => Math.abs(v.Q) / v.e / BILLION,
-    traps: [
-      { f: v => Math.abs(v.Q) / v.e, msg: 'זה מספר האלקטרונים עצמו. התבקשה תשובה במיליארדים, לכן חלקו ב-10⁹.' },
-      { f: v => Math.abs(v.Q) * KILO / v.e / BILLION, msg: 'יצא פי 1000 גדול מדי: כנראה התייחסתם ל-nC כאל μC, או ספרתם במיליונים ולא במיליארדים. 1 nC = 10⁻⁹ C.' },
-      { f: v => Math.abs(v.Q) / v.e / 1e11, msg: '1.5×10¹¹ אינו 1.5 מיליארד. מיליארד הוא 10⁹, ו-10¹¹ הם 100 מיליארד.' },
-      { f: v => Math.abs(v.Q) / v.e / 10 / BILLION, msg: 'טעות של פי 10 בחזקות. בדקו שוב את החילוק 10⁻⁸ / 10⁻¹⁹.' },
-    ],
-    hints: [
-      'המטען הכולל הוא מספר האלקטרונים כפול מטען של אלקטרון אחד: |Q| = N·e. לכן N = |Q| / e.',
-      'המירו קודם nC ל-C: 1 nC = 10⁻⁹ C. השתמשו בגודל המטען, בלי הסימן.',
-      '|Q| = 2.4×10⁻⁸ C. בדקו את החזקות: 10⁻⁸ / 10⁻¹⁹ = 10¹¹. מיליארד הוא 10⁹, ולכן 10¹¹ הם 100 מיליארד. כמה מיליארדים יש במספר שקיבלתם?',
-    ],
-    success: () => ({ anim: 'electrons_hop_to_balloon', arrows: [], fieldLines: false, deflectionDeg: null }),
-  },
-  // 6 - water_balloon: שדה חשמלי E = k|Q|/r², המרת kN/C. אין חץ כוח - קווי שדה בהצלחה.
-  {
-    scene: 'water_balloon', title: 'שדה חשמלי ליד זרם מים', desc: DESC_WATER,
-    story: 'בלון טעון עומד ליד זרם מים.',
-    ask: 'מהו גודל השדה החשמלי של הבלון במקום שבו עובר הזרם?',
-    unit: 'kN/C', signed: false, unknown: 'field', source: BALLOON, target: DROP_PLUS, consts: ['k'],
-    data: [
-      datum('Q', 'מטען הבלון Q', -25, 'nC', -9),
-      datum('r', 'מרחק מהזרם r', 5, 'cm', -2),
-    ],
-    compute: v => electricField(v.Q, v.r) / KILO,
-    traps: [
-      { f: v => KC * Math.abs(v.Q) / v.r / KILO, msg: 'שכחתם לרבע את r. בנוסחת השדה המרחק בריבוע.' },
-      { f: v => electricField(v.Q, v.r), msg: 'החישוב נכון, אבל התוצאה ב-N/C. התבקשה תשובה ב-kN/C (חלקו ב-1000).' },
-      { f: v => electricField(v.Q, v.r / CM) / KILO, msg: 'r נשאר בס"מ. המירו למטרים (5 cm = 0.05 m) לפני ההצבה.' },
-      { f: v => electricField(v.Q, v.r * 10) / KILO, msg: 'המרת ס"מ למטרים שגויה. 5 cm = 0.05 m ולא 0.5 m.' },
-    ],
-    hints: [
-      'שדה חשמלי של מטען נקודתי: E = k·|Q| / r², עם k = 9×10⁹. מחשבים גודל, בלי הסימן של Q. (בהמשך נשתמש בו: הכוח על מטען q בשדה E הוא F = q·E.)',
-      'המירו ל-SI: Q = 25×10⁻⁹ C ו-r = 0.05 m. שימו לב: r מופיע בריבוע.',
-      'בדקו בדרך: k·|Q| = 225 ו-r² = 2.5×10⁻³. התוצאה ב-N/C. חלקו ב-1000 כדי לקבל kN/C.',
-    ],
-    success: () => ({ anim: 'field_lines_stream_bends_slightly', arrows: [], fieldLines: true, deflectionDeg: null }),
-  },
-  // 7 - ruler_paper: בידוד Q מחוק קולון (המרות μN, nC, cm). גודל חיובי.
-  {
-    scene: 'ruler_paper', title: 'כמה טעון הסרגל?', desc: DESC_RULER,
+    scene: 'ruler_paper', title: 'כמה טעון הסרגל?', desc: DESC_RULER + NOTE_DM,
     story: 'נמדד הכוח בין סרגל טעון לפיסת נייר.',
     ask: 'מהו גודל המטען של הסרגל?',
     unit: 'nC', signed: false, unknown: 'source_charge', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k'],
@@ -273,9 +434,9 @@ const LEVEL_DEFS = [
     ],
     success: () => forcePair('paper_leaps_to_ruler'),
   },
-  // 8 - balloon_wall: בידוד r מחוק קולון (שורש ריבועי, המרת mN). distanceForForce מהמנוע.
+  // 14 - balloon_wall: בידוד r מחוק קולון (שורש ריבועי, המרת mN). distanceForForce מהמנוע.
   {
-    scene: 'balloon_wall', title: 'כמה רחוק הבלון מהקיר?', desc: DESC_WALL,
+    scene: 'balloon_wall', title: 'כמה רחוק הבלון מהקיר?', desc: DESC_WALL + NOTE_DM,
     story: 'מכשיר מודד את הכוח בין הבלון לקיר.',
     ask: 'מהו המרחק r בין הבלון לקיר?',
     unit: 'cm', signed: false, unknown: 'distance', source: BALLOON, target: WALL_NEAR_PLUS, consts: ['k'],
@@ -299,9 +460,9 @@ const LEVEL_DEFS = [
     ],
     success: () => forcePair('balloon_slides_to_wall_r_blinks'),
   },
-  // 9 - ruler_paper: תנאי הרמה גבולי F = W (mg = מיליגרם, לא m·g). גודל חיובי.
+  // 15 - ruler_paper: תנאי הרמה גבולי F = W (מיליגרם, nC, cm: כמה נתונים). גודל חיובי.
   {
-    scene: 'ruler_paper', title: 'הרמת פיסת נייר', desc: `${DESC_RULER} מטען הנייר q נתון וקבוע, ורק מטען הסרגל משתנה.`,
+    scene: 'ruler_paper', title: 'הרמת פיסת נייר', desc: `${DESC_RULER} מטען הנייר q נתון וקבוע, ורק מטען הסרגל משתנה.${NOTE_DM}`,
     story: 'הסרגל מנסה להרים פיסת נייר קלה.',
     ask: 'מהו הגודל המינימלי של מטען הסרגל שמצליח להרים את הנייר?',
     unit: 'nC', signed: false, unknown: 'min_source_charge', source: RULER, target: PAPER_NEAR_PLUS, consts: ['k', 'g'],
@@ -328,9 +489,9 @@ const LEVEL_DEFS = [
       arrows: [{ kind: 'force', lengthRel: 1 }, { kind: 'weight', lengthRel: 1 }], // F = W: אורכים שווים
     }),
   },
-  // 10 - water_balloon: שרשרת של שלושה צעדים: E, אחר כך F = q·E, אחר כך F / W.
+  // 16 - water_balloon: שרשרת של שלושה צעדים: E, אחר כך F = q·E, אחר כך F / W.
   {
-    scene: 'water_balloon', title: 'טיפה בשדה הבלון', desc: DESC_WATER,
+    scene: 'water_balloon', title: 'טיפה בשדה הבלון', desc: DESC_WATER + NOTE_DM_PURE,
     story: 'שדה הבלון מסיט טיפה מזרם המים.',
     ask: 'פי כמה גדול הכוח החשמלי על הטיפה ממשקל הטיפה?',
     unit: ' פעמים', signed: false, unknown: 'force_over_weight', source: BALLOON, target: DROP_PLUS, consts: ['k', 'g'],
@@ -416,7 +577,7 @@ const MAGNITUDE_MSG = 'התבקש גודל, ולכן התשובה חיובית. 
 export function evaluateStaticChargeAnswer(level, val) {
   const q = level.question;
   const pct = CONFIG.ANSWER_TOLERANCE_PCT;
-  const near = (x, target) => Math.abs(x - target) <= Math.max(Math.abs(target) * pct, 1e-12);
+  const near = (x, target) => Math.abs(x - target) <= Math.abs(target) * pct;
 
   if (near(val, q.answer)) return { outcome: 'correct', value: val };
   const trap = q.traps.find(t => near(val, t.value));

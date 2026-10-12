@@ -5,6 +5,9 @@
 // פיזיקה ספציפית כלל.
 //
 // topic.formulas (אופציונלי): דף נוסחאות לבועה הצפה - ראו formulaSheet.js. כל נושא חדש צריך להגדיר אותו.
+// opts.knownTopicIds (אופציונלי): מזהי נושאים קיימים - שורות התקדמות של נושאים שהוחלפו לא נספרות בנקודות.
+// topic.progression (אופציונלי): כיתוב מדרגת הקושי במפת השלבים. topic.formatAnswer(level) (אופציונלי):
+// איך מוצגת התשובה הנכונה אחרי פתרון (ברירת מחדל: answer + unit).
 //
 // opts.subtopic (אופציונלי) = {levelStart, levelEnd, chapterN, chapterTitle,
 // n, title, color} - "חלון" תת-נושא על טווח שלבים בתוך ה-topic (ראו
@@ -43,8 +46,11 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
   function shellStats() {
     if (preview) return undefined;
-    const points = Object.values(state.allProgress).reduce((sum, t) =>
-      sum + Object.values(t.levels || {}).filter(l => l.solved).length, 0);
+    const known = opts.knownTopicIds;
+    const points = Object.entries(state.allProgress).reduce((sum, [topicId, t]) =>
+      (known && !known.includes(topicId))
+        ? sum
+        : sum + Object.values(t.levels || {}).filter(l => l.solved).length, 0);
     return { streak: session.streakDays || 0, points };
   }
 
@@ -85,7 +91,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const nextLocal = Math.min(highestLocal + 1, windowSize);
     const breadcrumb = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle}` : (topic.subtitle || '');
     const headTitle = sub.n ? `${sub.n} ${sub.title}` : sub.title;
-    const progression = windowSize <= 4 ? 'הצבה ישירה → סידור נוסחה' : 'הצבה ישירה → סידור נוסחה → מספרים ריאליים';
+    const progression = topic.progression
+      || (windowSize <= 4 ? 'הצבה ישירה → סידור נוסחה' : 'הצבה ישירה → סידור נוסחה → מספרים ריאליים');
 
     const nodes = [];
     for (let i = 1; i <= windowSize; i++) {
@@ -366,7 +373,10 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
     const heroEl = document.getElementById('hero-figure');
     if (heroEl) {
-      heroEl.innerHTML = `<span dir="ltr" class="hero-value">${level.question.answer}${level.question.unit}</span><span class="hero-caption">התשובה הנכונה</span>`;
+      const heroText = typeof topic.formatAnswer === 'function'
+        ? topic.formatAnswer(level)
+        : `${level.question.answer}${level.question.unit}`;
+      heroEl.innerHTML = `<span dir="ltr" class="hero-value">${heroText}</span><span class="hero-caption">התשובה הנכונה</span>`;
       heroEl.classList.add('show');
     }
 
