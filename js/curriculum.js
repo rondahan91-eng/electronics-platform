@@ -94,7 +94,14 @@ export const TOPICS = {
     successMessage: staticChargeSuccessMessage,
     formulas: STATIC_CHARGE_FORMULAS,
     progression: 'בלי המרות → המרת נתון אחד → המרת תשובה → המרת כמה נתונים',
-    formatAnswer: level => `${fmtNum(level.question.answer)} ${level.question.unit.trim()}`,
+    // יחידה במילה עברית (אלקטרונים / פעמים): המספר נקרא ראשון, ואחריו המילה
+    formatAnswer: level => {
+      const unit = level.question.unit.trim();
+      const num = fmtNum(level.question.answer);
+      return /[\u0590-\u05FF]/.test(unit)
+        ? `<span dir="rtl"><bdi dir="ltr">${num}</bdi> ${unit}</span>`
+        : `${num} ${unit}`;
+    },
     // אין clearDisqualifyMarks / triggerDisqualifyAnimation / animateIncorrect /
     // onLevelMount - אין פסילה ואין שעון עוצר בנושא הזה (ראו staticChargeLevelGenerator.js);
     // תשובה שגויה = ריטוט ברירת המחדל של gameEngine.js.
