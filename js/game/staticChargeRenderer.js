@@ -106,7 +106,7 @@ const rText = (w, energized) => (w.unknown === 'distance' && !energized ? 'r = ?
 /** שבב "גודל נעלם" במרכז העליון: "F = ?" וכו'. מוצג רק במצב מנוחה. במרכז ולא בפינה,
  * כי כיפת ה-arena-portal חותכת את הפינות העליונות במסכים רחבים. */
 const UNKNOWN_SYMBOL = {
-  force: 'F', force_new_distance: 'F′', electron_count: 'N', field: 'E',
+  force: 'F', force_new_distance: 'F₂', electron_count: 'N', field: 'E',
   source_charge: 'Q', min_source_charge: 'Q min', force_over_weight: 'F / W',
 };
 function unknownChip(w) {
@@ -474,9 +474,9 @@ function waterBalloonScene(w, energized) {
       const yDim = 70;
       mk.push(extLine(edgeFar, yDim, edgeFar, WT.cy - 2), extLine(tipX, yDim, tipX, WT.cy - 14));
       mk.push(distLine(edgeFar, yDim, tipX, yDim));
-      mk.push(tag((edgeFar + tipX) / 2, yDim - 12, 'r'));
+      mk.push(tag((edgeFar + tipX) / 2, yDim - 12, 'r₁'));
       mk.push(distLine(edgeNear, WT.cy, tipX, WT.cy));
-      mk.push(tag((edgeNear + tipX) / 2, WT.cy - 16, 'r′'));
+      mk.push(tag((edgeNear + tipX) / 2, WT.cy - 16, 'r₂'));
     } else {
       const edge = cx + WT.rx;
       mk.push(distLine(edge, WT.cy, tipX, WT.cy));
@@ -509,7 +509,7 @@ function waterSuccessExtras(w, bcx, dropDx) {
   const px = WT.xs + dropDx;          // מיקום הטיפה הקרובה אחרי העיקום
   const base = 32;
   const out = [];
-  const forceLabel = w.variant === 'two_distances' ? 'F′' : 'F';
+  const forceLabel = w.variant === 'two_distances' ? 'F₂' : 'F';
   // קווי השדה קודם (מתחת), כדי שהחצים והתוויות יישארו קריאים מעליהם.
   if (lines) out.push(fieldLines(bcx, px - 22, !(arrows && arrows.length)));
   (arrows || []).forEach(ar => {
