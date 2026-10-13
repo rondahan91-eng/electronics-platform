@@ -17,6 +17,8 @@ const SUB = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅':
 const TO_SUP = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻', '+': '⁺' };
 const TO_SUB = { '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉', '-': '₋', '+': '₊' };
 
+import { mathFragment } from './mathMarkup.js';
+
 const E_EMPTY = 'נא להזין מספר.';
 const E_GENERIC = 'לא הצלחתי לקרוא את הביטוי. אפשר להקליד מספר, כתיב מדעי (4e-4) או לשלב ×, ÷, שבר וחזקה.';
 const E_UNIT = 'הקלידו מספר בלבד, בלי יחידה: היחידה כבר מופיעה ליד השדה.';
@@ -151,6 +153,80 @@ function evaluate(tokens) {
   return v;
 }
 
+// ביטוי -> סימון בקומות (⟦מונה⁄מכנה⟧): מה שהתלמיד/ה הקלידו, כשחילוק מוצג כשבר עומד.
+// null אם אין חילוק או שהביטוי לא נקרא. אותו דקדוק כמו evaluate.
+export function expressionMarkup(raw) {
+  const n = normalize(raw);
+  if (n.error || !n.text.includes('/')) return null;
+  const tokens = tokenize(n.text);
+  if (!tokens || !tokens.length) return null;
+  let p = 0;
+  const peek = () => tokens[p];
+  const eatOp = v => { if (peek() && peek().t === 'op' && peek().v === v) { p += 1; return true; } return false; };
+  const wrap = nd => (nd.k === 'bin' && (nd.op === '+' || nd.op === '-') ? `(${show(nd)})` : show(nd));
+  const strip = nd => (nd.k === 'paren' ? show(nd.e) : show(nd));
+  function show(nd) {
+    switch (nd.k) {
+      case 'num': return formatParsed(nd.v);
+      case 'neg': return `−${wrap(nd.e)}`;
+      case 'paren': return `(${show(nd.e)})`;
+      case 'bin':
+        if (nd.op === '/') return `⟦${strip(nd.l)}⁄${strip(nd.r)}⟧`;
+        if (nd.op === '*') return `${wrap(nd.l)} × ${wrap(nd.r)}`;
+        if (nd.op === '^') {
+          const base = (nd.l.k === 'num' || nd.l.k === 'paren') ? show(nd.l) : `(${show(nd.l)})`;
+          const e = nd.r;
+          if (e.k === 'num' && Number.isInteger(e.v) && e.v >= 0) return base + String(e.v).split('').map(c => TO_SUP[c] || c).join('');
+          return `${base}^(${show(e)})`;
+        }
+        return `${show(nd.l)} ${nd.op === '-' ? '−' : '+'} ${show(nd.r)}`;
+      default: return '';
+    }
+  }
+  function expr() {
+    let x = term();
+    for (;;) {
+      if (eatOp('+')) x = { k: 'bin', op: '+', l: x, r: term() };
+      else if (eatOp('-')) x = { k: 'bin', op: '-', l: x, r: term() };
+      else return x;
+    }
+  }
+  function term() {
+    let x = unary();
+    for (;;) {
+      if (eatOp('*')) x = { k: 'bin', op: '*', l: x, r: unary() };
+      else if (eatOp('/')) x = { k: 'bin', op: '/', l: x, r: unary() };
+      else return x;
+    }
+  }
+  function unary() {
+    if (eatOp('-')) return { k: 'neg', e: unary() };
+    if (eatOp('+')) return unary();
+    return power();
+  }
+  function power() {
+    const base = atom();
+    if (eatOp('^')) return { k: 'bin', op: '^', l: base, r: unary() };
+    return base;
+  }
+  function atom() {
+    const tk = peek();
+    if (!tk) throw new Error('eof');
+    if (tk.t === 'num') { p += 1; return { k: 'num', v: tk.v }; }
+    if (eatOp('(')) {
+      const x = expr();
+      if (!eatOp(')')) throw new Error('paren');
+      return { k: 'paren', e: x };
+    }
+    throw new Error('unexpected');
+  }
+  try {
+    const tree = expr();
+    if (p !== tokens.length) return null;
+    return show(tree);
+  } catch (e) { return null; }
+}
+
 export function parseAnswer(raw) {
   const n = normalize(raw);
   if (n.error) return { ok: false, error: n.error };
@@ -225,9 +301,13 @@ export function mountAnswerToolbar(input, host) {
     b.type = 'button';
     b.className = 'ans-key';
     b.dataset.key = id;
-    b.textContent = label;
+    if (id === 'frac') {                       // פני הלחצן: שבר עומד (a מעל b), לא a/b
+      b.innerHTML = '<span class="mfrac" dir="ltr" aria-hidden="true"><span class="mfn">a</span><span class="mfd">b</span></span>';
+    } else {
+      b.textContent = label;
+    }
     b.title = title;
-    b.setAttribute('aria-label', `${label} ${title}`);
+    b.setAttribute('aria-label', `${id === 'frac' ? 'שבר' : label} ${title}`);
     b.tabIndex = order.length === 0 ? 0 : -1;
     if (toggle) b.setAttribute('aria-pressed', 'false');
     // לא גונבים פוקוס/סמן מהשדה בלחיצת עכבר/מגע
@@ -249,7 +329,7 @@ export function mountAnswerToolbar(input, host) {
 
   addKey('mul', '×', 'כפל', op('×'));
   addKey('div', '÷', 'חילוק', op('÷'));
-  addKey('frac', 'a/b', 'שבר: (מונה)/(מכנה)', focus => {
+  addKey('frac', 'a/b', 'שבר: מונה ומכנה', focus => {
     setMode(null, false);
     const s = input.selectionStart ?? 0, e = input.selectionEnd ?? s;
     const sel = input.value.slice(s, e);
@@ -346,7 +426,10 @@ export function mountAnswerToolbar(input, host) {
       preview.className = 'ans-preview ok';
       const num = document.createElement('bdi');
       num.setAttribute('dir', 'ltr');
-      num.textContent = formatParsed(r.value);
+      // חילוק מוצג בקומות: "⟦3⁄4⟧ = 0.75"; בלי חילוק - רק הערך, כמו קודם
+      const shown = expressionMarkup(raw);
+      if (shown) num.appendChild(mathFragment(`${shown} = ${formatParsed(r.value)}`));
+      else num.textContent = formatParsed(r.value);
       preview.replaceChildren(document.createTextNode('נקרא כ: '), num);
     } else if (looksIncomplete(raw)) {
       preview.className = 'ans-preview';        // באמצע כתיבה - בלי שגיאה

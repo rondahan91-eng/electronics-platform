@@ -107,11 +107,23 @@ const rText = (w, energized) => (w.unknown === 'distance' && !energized ? 'r = ?
  * כי כיפת ה-arena-portal חותכת את הפינות העליונות במסכים רחבים. */
 const UNKNOWN_SYMBOL = {
   force: 'F', force_new_distance: 'F₂', electron_count: 'N', field: 'E',
-  source_charge: 'Q', min_source_charge: 'Q min', force_over_weight: 'F / W',
+  source_charge: 'Q', min_source_charge: 'Q min', force_over_weight: '⟦F⁄W⟧',
 };
 function unknownChip(w) {
   const sym = UNKNOWN_SYMBOL[w.unknown];
   if (!sym) return ''; // distance: ה-"?" מופיע על סמן r עצמו
+  // יחס F / W: שבר עומד (F מעל W), ואחריו "= ?"
+  const fr = sym.match(/^⟦(.+)⁄(.+)⟧$/);
+  if (fr) {
+    const bw = 104, x0 = (W - bw) / 2, fx = x0 + 34;
+    return `<g>
+    <rect x="${f(x0)}" y="8" width="${bw}" height="50" rx="8" fill="#080b16" fill-opacity="0.86" stroke="${C.border}"/>
+    <text x="${f(fx)}" y="28" text-anchor="middle" class="comp-label" style="font-size:14px" fill="${C.soft}">${fr[1]}</text>
+    <line x1="${f(fx - 13)}" y1="33" x2="${f(fx + 13)}" y2="33" stroke="${C.soft}" stroke-width="1.6"/>
+    <text x="${f(fx)}" y="50" text-anchor="middle" class="comp-label" style="font-size:14px" fill="${C.soft}">${fr[2]}</text>
+    <text x="${f(fx + 22)}" y="38" text-anchor="start" class="comp-label" style="font-size:14px" fill="${C.soft}">= ?</text>
+  </g>`;
+  }
   const text = `${sym} = ?`;
   const bw = text.length * 8.6 + 24;
   const x0 = (W - bw) / 2;

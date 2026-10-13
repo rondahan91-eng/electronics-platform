@@ -20,6 +20,7 @@ import { CONFIG } from '../config.js';
 import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
 import { attachFormulaSheet } from './formulaSheet.js';
 import { parseAnswer, mountAnswerToolbar } from './answerInput.js';
+import { mathHtml } from './mathMarkup.js';
 
 export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
   const preview = !!opts.preview;
@@ -91,7 +92,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const doneCount = (() => { let c = 0; for (let i = 1; i <= windowSize; i++) if (state.progress.levels[toGlobal(i)]?.solved) c++; return c; })();
     const avgSecs = windowAvgSeconds();
     const nextLocal = Math.min(highestLocal + 1, windowSize);
-    const breadcrumb = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle}` : (topic.subtitle || '');
+    const breadcrumb = mathHtml(sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle}` : (topic.subtitle || ''));
     const headTitle = sub.n ? `${sub.n} ${sub.title}` : sub.title;
     const progression = topic.progression
       || (windowSize <= 4 ? 'הצבה ישירה → סידור נוסחה' : 'הצבה ישירה → סידור נוסחה → מספרים ריאליים');
@@ -170,7 +171,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // סרגל לחצני הכתיב: רק בשדה מספרי, ורק בנושא שלא כיבה אותו (topic.answerTools === false)
     const useTools = q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
-    const breadcrumb = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
+    const breadcrumb = mathHtml(sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || ''));
     const dotColor = sub.color || 'var(--px-brand)';
     // הזירה מוצגת "פתוחה" (סטטית) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
     const { svg } = topic.render(level, false);
@@ -178,7 +179,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // נושא יכול להצהיר על question.data = [{label, value}] - כל נתון בשורה נפרדת
     // משלו מתחת לשאלה (ולא משולב בתוך משפט). בלי data - לא מוצג דבר.
     const dataRows = Array.isArray(q.data) && q.data.length
-      ? `<ul class="q-data">${q.data.map(d => `<li><span class="q-data-label">${d.label}</span><b class="q-data-value" dir="ltr">${d.value}</b></li>`).join('')}</ul>`
+      ? `<ul class="q-data">${q.data.map(d => `<li><span class="q-data-label">${mathHtml(d.label)}</span><b class="q-data-value" dir="ltr">${mathHtml(d.value)}</b></li>`).join('')}</ul>`
       : '';
 
     app.innerHTML = shellHtml(session, session.role === 'admin' ? 'teacher' : 'home', `
@@ -196,7 +197,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
           <div class="game-breadcrumb"><span class="dot" style="background:${dotColor};"></span><span>${breadcrumb} · שלב ${localLevel}</span></div>
           <h1>${level.title}</h1>
           <button type="button" class="intro-toggle" id="intro-toggle" aria-expanded="false">💡 הסבר על השלב</button>
-          <p class="game-intro-desc" id="game-intro-desc" hidden>${level.description}</p>
+          <p class="game-intro-desc" id="game-intro-desc" hidden>${mathHtml(level.description)}</p>
         </div>
 
         <div class="arena-wrap">
@@ -208,7 +209,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
         <div class="game-grid">
           <div class="qa-panel glass">
-            <div class="qa-question">${q.prompt}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
+            <div class="qa-question">${mathHtml(q.prompt)}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
             <div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>
@@ -286,7 +287,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     card.style.display = 'block';
     document.getElementById('hints-count').textContent = state.hintsShown;
     document.getElementById('hint-list').innerHTML = hints.slice(0, state.hintsShown)
-      .map(h => `<div class="hint-item"><span class="dot"></span><span class="text">${h}</span></div>`).join('');
+      .map(h => `<div class="hint-item"><span class="dot"></span><span class="text">${mathHtml(h)}</span></div>`).join('');
     revealNearest(card);
   }
 
@@ -334,7 +335,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     playError();
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback bad show';
-    fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${result.message || '⚡ לא מדויק. בדקו שוב את הנוסחה ונסו שוב.'}</span>`;
+    fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${mathHtml(result.message || '⚡ לא מדויק. בדקו שוב את הנוסחה ונסו שוב.')}</span>`;
     revealNearest(fb);
     const stage = document.getElementById('circuit-stage');
     if (stage) {
@@ -365,7 +366,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     if (topic.triggerDisqualifyAnimation) topic.triggerDisqualifyAnimation(stage, level, result);
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback burn show';
-    fb.innerHTML = `<span class="fb-tag">!</span><span class="fb-text">${result.message}</span>`;
+    fb.innerHTML = `<span class="fb-tag">!</span><span class="fb-text">${mathHtml(result.message)}</span>`;
     const lv = state.progress.levels[level.id] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
     lv.attempts = (lv.attempts || 0) + 1;
     lv.disqualifications = (lv.disqualifications || 0) + 1;
@@ -387,7 +388,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     fb.className = 'qa-feedback ok show';
     const elapsed = Math.round((performance.now() - state.startTs) / 1000);
     fb.innerHTML = `<span class="fb-tag">✓</span><span class="fb-text">${topic.successMessage
-      ? topic.successMessage(level, elapsed)
+      ? mathHtml(topic.successMessage(level, elapsed))
       : `מצוין! פתרתם את השלב בהצלחה (זמן פתרון: ${fmtTime(elapsed)}).`}</span>`;
 
     // רק עכשיו, לאחר תשובה נכונה, מריצים את האנימציה/מצב ה"אנרגטי" של הזירה,

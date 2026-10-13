@@ -39,7 +39,7 @@ export function generateVoltageLevel(localId) {
   const question = {
     prompt: g.prompt, unit: g.unit, answer: g.answer,
     hints: [
-      'חוק אוהם למעגל שלם (מקור + עומס בטור): I = ε / (R + r)',
+      'חוק אוהם למעגל שלם (מקור + עומס בטור): I = ⟦ε⁄R + r⟧',
       'המתח בהדקי המקור הוא המתח הנופל על העומס החיצוני בלבד: V = I·R (לא ε!).',
       'ε תמיד גדול מ-V כשיש עומס, כי חלק מהמתח "נאבד" על ההתנגדות הפנימית: ε = V + I·r.',
     ],

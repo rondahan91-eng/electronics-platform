@@ -103,26 +103,26 @@ export function generateCurrentLevel(localId) {
   if (g.type === 'direction') {
     hints = [
       'הזרם החשמלי המוסכם זורם תמיד בכיוון ההפוך לכיוון התנועה בפועל של האלקטרונים (מטענים שליליים) - זו הגדרת הכיוון המוסכם.',
-      'גודל הזרם מחושב באותו אופן כמו תמיד: I = Q/t.',
+      'גודל הזרם מחושב באותו אופן כמו תמיד: I = ⟦Q⁄t⟧.',
       `התנועה בפועל של האלקטרונים: ${dirArrowText(g.electronDir)} ← לכן כיוון הזרם המוסכם: ${dirArrowText(g.currentDir)}.`,
     ];
   } else if (g.find === 'Q') {
     hints = [
-      'אותה נוסחה בדיוק, רק מסודרת אחרת: I = Q/t ⇒ Q = I·t.',
+      'אותה נוסחה בדיוק, רק מסודרת אחרת: I = ⟦Q⁄t⟧ ⇒ Q = I·t.',
       'יחידת המטען היא קולון (C).',
       `הציבו את הנתונים: Q = ${g.I}A × ${g.t}s.`,
     ];
   } else if (g.find === 't') {
     hints = [
-      'אותה נוסחה בדיוק, רק מסודרת אחרת: I = Q/t ⇒ t = Q/I.',
+      'אותה נוסחה בדיוק, רק מסודרת אחרת: I = ⟦Q⁄t⟧ ⇒ t = ⟦Q⁄I⟧.',
       'יחידת הזמן היא שניות (s).',
-      `הציבו את הנתונים: t = ${g.Q}C / ${g.I}A.`,
+      `הציבו את הנתונים: t = ⟦${g.Q}C⁄${g.I}A⟧.`,
     ];
   } else {
     hints = [
-      'זרם חשמלי מוגדר כקצב זרימת המטען דרך חתך הרוחב של המוליך: I = Q/t.',
-      'יחידת הזרם היא אמפר (A): 1A = 1C/1s - קולון אחד שעובר בשנייה אחת.',
-      `הציבו את הנתונים: I = ${g.Q}C / ${g.t}s.`,
+      'זרם חשמלי מוגדר כקצב זרימת המטען דרך חתך הרוחב של המוליך: I = ⟦Q⁄t⟧.',
+      'יחידת הזרם היא אמפר (A): 1A = ⟦1C⁄1s⟧ - קולון אחד שעובר בשנייה אחת.',
+      `הציבו את הנתונים: I = ⟦${g.Q}C⁄${g.t}s⟧.`,
     ];
   }
 
@@ -157,19 +157,19 @@ function evaluateFindQ(q, val) {
   if (Math.abs(val - q.t) <= tTol) {
     return { outcome: 'incorrect', value: val, message: '⚡ זה ערך הזמן עצמו (t), לא המטען - בדקו שוב את הנוסחה Q = I·t.' };
   }
-  return { outcome: 'incorrect', value: val, message: '🔌 לא מדויק - סדרו מחדש את הנוסחה I=Q/t כך שתבודד את Q (Q=I·t), ונסו שוב.' };
+  return { outcome: 'incorrect', value: val, message: '🔌 לא מדויק - סדרו מחדש את הנוסחה I=⟦Q⁄t⟧ כך שתבודד את Q (Q=I·t), ונסו שוב.' };
 }
 
 function evaluateFindT(q, val) {
   const iTol = Math.max(Math.abs(q.I) * CONFIG.ANSWER_TOLERANCE_PCT, 1e-9);
   const qTol = Math.max(Math.abs(q.Q) * CONFIG.ANSWER_TOLERANCE_PCT, 1e-9);
   if (Math.abs(val - q.I) <= iTol) {
-    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך הזרם עצמו (I), לא הזמן - זכרו: t = Q/I.' };
+    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך הזרם עצמו (I), לא הזמן - זכרו: t = ⟦Q⁄I⟧.' };
   }
   if (Math.abs(val - q.Q) <= qTol) {
-    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך המטען עצמו (Q), לא הזמן - בדקו שוב את הנוסחה t = Q/I.' };
+    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך המטען עצמו (Q), לא הזמן - בדקו שוב את הנוסחה t = ⟦Q⁄I⟧.' };
   }
-  return { outcome: 'incorrect', value: val, message: '🔌 לא מדויק - סדרו מחדש את הנוסחה I=Q/t כך שתבודד את t (t=Q/I), ונסו שוב.' };
+  return { outcome: 'incorrect', value: val, message: '🔌 לא מדויק - סדרו מחדש את הנוסחה I=⟦Q⁄t⟧ כך שתבודד את t (t=⟦Q⁄I⟧), ונסו שוב.' };
 }
 
 export function evaluateCurrentAnswer(level, val) {
@@ -206,17 +206,17 @@ export function evaluateCurrentAnswer(level, val) {
   const qTol = Math.max(Math.abs(q.Q) * CONFIG.ANSWER_TOLERANCE_PCT, 1e-9);
   const tTol = Math.max(Math.abs(q.t) * CONFIG.ANSWER_TOLERANCE_PCT, 1e-9);
   if (Math.abs(Math.abs(val) - q.Q) <= qTol) {
-    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך המטען עצמו (Q), לא הזרם - זכרו לחלק בזמן: I = Q/t.' };
+    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך המטען עצמו (Q), לא הזרם - זכרו לחלק בזמן: I = ⟦Q⁄t⟧.' };
   }
   if (Math.abs(Math.abs(val) - q.t) <= tTol) {
-    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך הזמן עצמו (t), לא הזרם - בדקו שוב את הנוסחה I = Q/t.' };
+    return { outcome: 'incorrect', value: val, message: '⚡ זה ערך הזמן עצמו (t), לא הזרם - בדקו שוב את הנוסחה I = ⟦Q⁄t⟧.' };
   }
 
   return {
     outcome: 'incorrect',
     value: val,
     message: q.type === 'direction'
-      ? '🔌 לא מדויק - בדקו מחדש גם את הגודל (I=Q/t) וגם את הכיוון (הפוך לתנועת האלקטרונים).'
-      : '🔌 לא מדויק - חזרו על הגדרת הזרם (I = Q/t) ונסו שוב.',
+      ? '🔌 לא מדויק - בדקו מחדש גם את הגודל (I=⟦Q⁄t⟧) וגם את הכיוון (הפוך לתנועת האלקטרונים).'
+      : '🔌 לא מדויק - חזרו על הגדרת הזרם (I = ⟦Q⁄t⟧) ונסו שוב.',
   };
 }

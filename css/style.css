@@ -814,3 +814,20 @@ footer.foot {
   color: rgba(255,255,255,.88); font-size: 12px;
   background: rgba(10,12,24,.35); border-radius: 20px; backdrop-filter: blur(6px);
 }
+
+/* ===== כתיב בקומות (שבר עומד): js/game/mathMarkup.js - ⟦מונה⁄מכנה⟧ ===== */
+.mexpr { unicode-bidi: isolate; }
+.mfrac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle;
+  margin: 0 .2em; line-height: 1.2; text-align: center; font-family: inherit; }
+.mfrac > .mfn { padding: 0 .3em .08em; border-bottom: 1.5px solid currentColor; }
+.mfrac > .mfd { padding: .08em .3em 0; }
+.mfrac .mfrac { font-size: .92em; }
+.fx-expr .mfrac { font-size: 1.04em; }
+button.ans-key .mfrac { font-size: 12px; margin: 0; line-height: 1.05; vertical-align: -.35em; }
+/* ===== תרשימי המרת יחידות בדף הנוסחאות (כמו בדוגמה: חץ ×, חץ ÷) ===== */
+.fx-cycles { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; justify-content: center; }
+.fx-cycle { flex: 1 1 210px; max-width: 270px; height: auto; direction: ltr; }
+.fx-cycle-arc { stroke: var(--px-brand-deep); }
+.fx-cycle-head { fill: var(--px-brand-deep); }
+.fx-cycle-unit { font: 800 21px var(--font-mono); fill: var(--px-ink); }
+.fx-cycle-op { font: 700 15px var(--font-mono); fill: var(--px-brand-deep); }

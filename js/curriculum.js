@@ -124,7 +124,7 @@ export const TOPICS = {
   'electric-current': {
     id: 'electric-current',
     title: 'זרם חשמלי',
-    subtitle: 'קצב זרימת המטען דרך חתך התיל - I = Q/t',
+    subtitle: 'קצב זרימת המטען דרך חתך התיל - I = ⟦Q⁄t⟧',
     color: '#ffb454',
     totalLevels: currentLevelCount(),
     generateLevel: (localId) => generateCurrentLevel(localId),
@@ -142,7 +142,7 @@ export const TOPICS = {
         return `✅ מדויק! מטען כולל של ${q.answer}C עבר דרך החתך - בדיוק לפי Q=I·t (זמן: ${fmtTime(elapsedSeconds)}).`;
       }
       if (q.find === 't') {
-        return `✅ מדויק! לקח ${q.answer} שניות - בדיוק לפי t=Q/I (זמן: ${fmtTime(elapsedSeconds)}).`;
+        return `✅ מדויק! לקח ${q.answer} שניות - בדיוק לפי t=⟦Q⁄I⟧ (זמן: ${fmtTime(elapsedSeconds)}).`;
       }
       return `✅ מדויק! זרם של ${q.answer}A - קצב זרימת המטען הנכון בדיוק (זמן: ${fmtTime(elapsedSeconds)}).`;
     },

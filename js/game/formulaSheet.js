@@ -16,6 +16,8 @@
 // ({open, scrollTop}) כך שהלוח נשאר פתוח, באותו מקום גלילה, במעבר בין שלבים.
 // ==========================================================================
 
+import { mathFragment, hasMath } from './mathMarkup.js';
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -76,6 +78,43 @@ function appendMixed(node, text) {
   }
   if (last < text.length) node.appendChild(document.createTextNode(text.slice(last)));
   return node;
+}
+
+// ---- תרשים המרת יחידות (כמו בדוגמה "Mass"): היחידה הקטנה משמאל, הגדולה מימין;
+// החץ העליון מהגדולה אל הקטנה (כפל), התחתון מהקטנה אל הגדולה (חילוק).
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, text) {
+  const n = document.createElementNS(SVG_NS, tag);
+  Object.keys(attrs || {}).forEach(k => n.setAttribute(k, attrs[k]));
+  if (text != null) n.textContent = text;
+  return n;
+}
+function arrowHead(tipX, tipY, fromX, fromY, size) {
+  const dx = tipX - fromX, dy = tipY - fromY, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+  const bx = tipX - ux * size, by = tipY - uy * size, w = size * 0.5;
+  return `${tipX},${tipY} ${bx + px * w},${by + py * w} ${bx - px * w},${by - py * w}`;
+}
+function convertCycle(c) {
+  const svg = svgEl('svg', { viewBox: '0 0 260 140', class: 'fx-cycle', role: 'img' });
+  svg.setAttribute('aria-label', `מ-${c.big} ל-${c.small} מכפילים ב-${c.factor}. מ-${c.small} ל-${c.big} מחלקים ב-${c.factor}.`);
+  const stroke = { fill: 'none', 'stroke-width': '3', 'stroke-linecap': 'round' };
+  // חץ עליון: מימין (היחידה הגדולה) לשמאל (הקטנה)
+  svg.appendChild(svgEl('path', { ...stroke, class: 'fx-cycle-arc', d: 'M 200 52 C 176 14 84 14 60 52' }));
+  svg.appendChild(svgEl('polygon', { class: 'fx-cycle-head', points: arrowHead(60, 52, 84, 14, 12) }));
+  // חץ תחתון: משמאל (הקטנה) לימין (הגדולה)
+  svg.appendChild(svgEl('path', { ...stroke, class: 'fx-cycle-arc', d: 'M 60 84 C 84 122 176 122 200 84' }));
+  svg.appendChild(svgEl('polygon', { class: 'fx-cycle-head', points: arrowHead(200, 84, 176, 122, 12) }));
+  svg.appendChild(svgEl('text', { x: 130, y: 17, 'text-anchor': 'middle', class: 'fx-cycle-op' }, `×${c.factor}`));
+  svg.appendChild(svgEl('text', { x: 130, y: 138, 'text-anchor': 'middle', class: 'fx-cycle-op' }, `÷${c.factor}`));
+  svg.appendChild(svgEl('text', { x: 36, y: 76, 'text-anchor': 'middle', class: 'fx-cycle-unit' }, c.small));
+  svg.appendChild(svgEl('text', { x: 224, y: 76, 'text-anchor': 'middle', class: 'fx-cycle-unit' }, c.big));
+  return svg;
+}
+function convertCycles(list) {
+  const wrap = el('div', 'fx-cycles');
+  list.forEach(c => wrap.appendChild(convertCycle(c)));
+  return wrap;
 }
 
 let current = null; // המופע הפעיל (בועה אחת לכל היותר)
@@ -144,10 +183,12 @@ function build(container, topic, sections, state) {
       const row = el('div', 'fx-item');
       row.appendChild(appendMixed(el('div', 'fx-label'), it.label));
       if (it.expr) {
-        const expr = el('div', 'fx-expr', it.expr);
+        const expr = el('div', 'fx-expr');
         expr.setAttribute('dir', 'ltr');
+        expr.appendChild(hasMath(it.expr) ? mathFragment(it.expr) : document.createTextNode(it.expr));
         row.appendChild(expr);
       }
+      if (Array.isArray(it.convert) && it.convert.length) row.appendChild(convertCycles(it.convert));
       if (it.note) row.appendChild(appendMixed(el('div', 'fx-note'), it.note));
       secEl.appendChild(row);
     });
