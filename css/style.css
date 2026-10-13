@@ -536,7 +536,8 @@ button.ans-key.danger { color: var(--px-coral-ink); border-color: var(--px-coral
 button.ans-key:focus-visible { outline: 3px solid var(--px-brand-deep); outline-offset: 2px; }
 button.ans-key:disabled { opacity: .45; cursor: not-allowed; }
 @media (pointer: coarse) { button.ans-key { min-width: 44px; min-height: 44px; } }
-.ans-preview { min-height: 20px; margin-top: 6px; font-size: 13px; color: var(--px-ink-soft); }
+/* גובה קבוע בגובה של הד עם שבר עומד: כך הרמזים והמשוב מתחת לא קופצים בכל הקלדה */
+.ans-preview { min-height: 52px; margin-top: 6px; font-size: 13px; color: var(--px-ink-soft); }
 .ans-preview.ok { color: var(--px-brand-deep); }
 .ans-preview.ok bdi { font: 700 14px var(--font-mono); }
 .ans-preview.bad { color: var(--px-coral-ink); }

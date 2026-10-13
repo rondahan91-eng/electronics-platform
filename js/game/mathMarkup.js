@@ -77,8 +77,9 @@ function toPlain(nodes, spoken) {
     if (typeof n === 'string') return n;
     const a = toPlain(n.num, spoken).trim();
     const b = toPlain(n.den, spoken).trim();
-    if (spoken) return `${a} חלקי ${b}`;
-    return `${NEEDS_PARENS.test(a) ? `(${a})` : a} / ${NEEDS_PARENS.test(b) ? `(${b})` : b}`;
+    const pa = NEEDS_PARENS.test(a) ? `(${a})` : a;
+    const pb = NEEDS_PARENS.test(b) ? `(${b})` : b;
+    return spoken ? `${pa} חלקי ${pb}` : `${pa} / ${pb}`;
   }).join('');
 }
 
@@ -91,10 +92,17 @@ const attr = s => s.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/"/g,
 // שבר: role="math" + aria-label ("Q חלקי t") לקורא מסך; מקף נסתר (mfs) כדי שהעתקה/חיפוש יקבלו Q/t.
 function fracHtml(n) {
   const label = attr(toPlain([n], true));
+  const num = toHtml(n.num).trim();
+  const den = toHtml(n.den).trim();
+  // סוגריים נסתרים סביב מונה/מכנה מורכבים (הם לא נראים, אבל העתקה מקבלת "(a + b)/c" ולא "a + b/c")
+  const hid = t => `<span class="mfs" aria-hidden="true">${t}</span>`;
+  const wrapTxt = html => NEEDS_PARENS.test(html.replace(/<[^>]*>/g, ''));
+  const [no, nc] = wrapTxt(num) ? [hid('('), hid(')')] : ['', ''];
+  const [dopen, dclose] = wrapTxt(den) ? [hid('('), hid(')')] : ['', ''];
   return `<span class="mfrac" dir="ltr" role="math" aria-label="${label}">`
-    + `<span class="mfn" aria-hidden="true">${toHtml(n.num).trim()}</span>`
-    + '<span class="mfs" aria-hidden="true">/</span>'
-    + `<span class="mfd" aria-hidden="true">${toHtml(n.den).trim()}</span></span>`;
+    + `${no}<span class="mfn" aria-hidden="true">${num}</span>${nc}`
+    + hid('/')
+    + `${dopen}<span class="mfd" aria-hidden="true">${den}</span>${dclose}</span>`;
 }
 
 function toHtml(nodes) {
@@ -133,10 +141,20 @@ function chunkify(nodes) {
         return;
       }
       cur.parts.push(piece);
-      if (HEB.test(piece) || DASH_ONLY.test(piece)) cur.heb = true;               // מקף עצמאי = פיסוק עברי
+      if (HEB.test(piece)) cur.heb = true;
+      if (piece.includes('|')) cur.bar = true;                                   // |Q|: ערך מוחלט - גם הוא דורש איזולט
     });
   });
   push();
+  // מקף עצמאי (" - ") מפריד בין ביטויים רק כשאחד משכניו הוא טקסט עברי (X - קולון, התיל - I = ...);
+  // בין שני אופרנדים לטיניים ("F₁ - ⟦…⟧") הוא סימן חיסור ונשאר בתוך הרצף.
+  out.forEach(c => { c.hebWord = c.heb; });
+  out.forEach((c, i) => {
+    if (c.ws || c.parts.length !== 1 || typeof c.parts[0] !== 'string' || !DASH_ONLY.test(c.parts[0])) return;
+    const prev = out.slice(0, i).reverse().find(x => !x.ws);
+    const next = out.slice(i + 1).find(x => !x.ws);
+    if ((prev && prev.hebWord) || (next && next.hebWord)) c.heb = true;
+  });
   return out;
 }
 
@@ -152,10 +170,10 @@ function groupRuns(chunks) {
       items.push(chunks[j + 1], chunks[j + 2]);
       j += 2;
     }
-    const hasFrac = items.some(x => !x.ws && x.frac);
+    const needs = items.some(x => !x.ws && (x.frac || x.bar));
     const open = items.reduce((a, x) => a + (x.ws ? 0 : x.open), 0);
     const close = items.reduce((a, x) => a + (x.ws ? 0 : x.close), 0);
-    segs.push({ wrap: hasFrac && open === close, items });
+    segs.push({ wrap: needs && open === close, items });
     i = j + 1;
   }
   return segs;
@@ -177,6 +195,23 @@ function trimPunct(items) {
     if (m && last.parts[k].length > m[0].length) { post = m[0]; last.parts[k] = last.parts[k].slice(0, -m[0].length); }
     else if (m && last.parts[k].length === m[0].length && k > 0) { post = m[0]; last.parts.pop(); }
   }
+  // סוגר שזוגו בטקסט העברי שמסביב (לא בתוך הרצף) יוצא מחוץ לאיזולט, כדי שיתהפך נכון עם המשפט
+  const all = items.filter(x => !x.ws).flatMap(x => x.parts).filter(p => typeof p === 'string').join('');
+  const cnt = ch => all.split(ch).length - 1;
+  [['(', ')'], ['[', ']']].forEach(([o, c]) => {
+    const fp = items[0] && items[0].parts;
+    const f = fp && fp[0];
+    if (typeof f === 'string' && f.startsWith(o) && cnt(o) > cnt(c)) {
+      if (f.length > 1) { pre = o + pre; fp[0] = f.slice(1); }
+      else if (fp.length > 1) { pre = o + pre; fp.shift(); }
+    }
+    const lp = items[items.length - 1] && items[items.length - 1].parts;
+    const l = lp && lp[lp.length - 1];
+    if (typeof l === 'string' && l.endsWith(c) && cnt(c) > cnt(o)) {
+      if (l.length > 1) { post = c + post; lp[lp.length - 1] = l.slice(0, -1); }
+      else if (lp.length > 1) { post = c + post; lp.pop(); }
+    }
+  });
   return { pre, post };
 }
 
@@ -187,7 +222,8 @@ function itemsHtml(items) {
 }
 
 function topHtml(nodes) {
-  if (!nodes.some(n => typeof n !== 'string')) return nodes.join('');
+  const needs = nodes.some(n => typeof n !== 'string' || n.includes('|'));
+  if (!needs) return nodes.join('');
   return groupRuns(chunkify(nodes)).map(seg => {
     if (!seg.wrap) return itemsHtml(seg.items);
     const { pre, post } = trimPunct(seg.items);
@@ -196,8 +232,11 @@ function topHtml(nodes) {
 }
 
 export function mathHtml(str) {
-  if (!hasMath(str)) return str == null ? '' : String(str);
-  return topHtml(parseMath(str));
+  if (str == null) return '';
+  const s = String(str);
+  // בלי שבר וגם בלי "|" (ערך מוחלט) אין מה לבודד: הטקסט עובר כמות שהוא
+  if (!hasMath(s) && !s.includes('|')) return s;
+  return topHtml(parseMath(s));
 }
 
 export function mathFragment(str, doc = document) {

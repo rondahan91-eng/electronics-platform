@@ -122,7 +122,11 @@ function convertCycles(list) {
 
 // טקסט שיכול להכיל שבר בקומות (⟦מונה⁄מכנה⟧): דרך mathMarkup; אחרת הבידוד הרגיל של appendMixed
 function appendRich(node, text) {
-  if (hasMath(text)) { node.appendChild(mathFragment(text)); return node; }
+  if (hasMath(text)) {
+    // הטקסט עובר דרך מפענח HTML: "<" ו-"&" (למשל "r<R") נמלטים כדי שלא ייבלעו כתג
+    node.appendChild(mathFragment(String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')));
+    return node;
+  }
   return appendMixed(node, text);
 }
 
