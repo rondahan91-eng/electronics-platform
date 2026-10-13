@@ -164,7 +164,10 @@ export function expressionMarkup(raw) {
   const peek = () => tokens[p];
   const eatOp = v => { if (peek() && peek().t === 'op' && peek().v === v) { p += 1; return true; } return false; };
   const wrap = nd => (nd.k === 'bin' && (nd.op === '+' || nd.op === '-') ? `(${show(nd)})` : show(nd));
+  // מספר בכתיב מדעי (4×10⁻⁴) שנכפל באחר נכנס לסוגריים, כדי ש-"9×10⁹ × 2×10⁻⁸" לא יהיה מבלבל
+  const wrapMul = nd => (nd.k === 'num' && formatParsed(nd.v).includes('×') ? `(${show(nd)})` : wrap(nd));
   const strip = nd => (nd.k === 'paren' ? show(nd.e) : show(nd));
+  const supText = digits => String(digits).split('').map(c => TO_SUP[c] || c).join('');
   function show(nd) {
     switch (nd.k) {
       case 'num': return formatParsed(nd.v);
@@ -172,11 +175,12 @@ export function expressionMarkup(raw) {
       case 'paren': return `(${show(nd.e)})`;
       case 'bin':
         if (nd.op === '/') return `⟦${strip(nd.l)}⁄${strip(nd.r)}⟧`;
-        if (nd.op === '*') return `${wrap(nd.l)} × ${wrap(nd.r)}`;
+        if (nd.op === '*') return `${wrapMul(nd.l)} × ${wrapMul(nd.r)}`;
         if (nd.op === '^') {
           const base = (nd.l.k === 'num' || nd.l.k === 'paren') ? show(nd.l) : `(${show(nd.l)})`;
           const e = nd.r;
-          if (e.k === 'num' && Number.isInteger(e.v) && e.v >= 0) return base + String(e.v).split('').map(c => TO_SUP[c] || c).join('');
+          if (e.k === 'num' && Number.isInteger(e.v) && e.v >= 0) return base + supText(e.v);
+          if (e.k === 'neg' && e.e.k === 'num' && Number.isInteger(e.e.v) && e.e.v >= 0) return `${base}⁻${supText(e.e.v)}`;
           return `${base}^(${show(e)})`;
         }
         return `${show(nd.l)} ${nd.op === '-' ? '−' : '+'} ${show(nd.r)}`;
