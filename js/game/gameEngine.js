@@ -20,7 +20,7 @@ import { CONFIG } from '../config.js';
 import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
 import { attachFormulaSheet } from './formulaSheet.js';
 import { parseAnswer, mountAnswerToolbar } from './answerInput.js';
-import { mathHtml } from './mathMarkup.js';
+import { mathHtml, mathPlain } from './mathMarkup.js';
 
 export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
   const preview = !!opts.preview;
@@ -92,7 +92,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const doneCount = (() => { let c = 0; for (let i = 1; i <= windowSize; i++) if (state.progress.levels[toGlobal(i)]?.solved) c++; return c; })();
     const avgSecs = windowAvgSeconds();
     const nextLocal = Math.min(highestLocal + 1, windowSize);
-    const breadcrumb = mathHtml(sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle}` : (topic.subtitle || ''));
+    const breadcrumbText = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle}` : (topic.subtitle || '');
+    const breadcrumb = mathHtml(breadcrumbText);
     const headTitle = sub.n ? `${sub.n} ${sub.title}` : sub.title;
     const progression = topic.progression
       || (windowSize <= 4 ? 'הצבה ישירה → סידור נוסחה' : 'הצבה ישירה → סידור נוסחה → מספרים ריאליים');
@@ -146,7 +147,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       <footer class="foot">${CONFIG.APP_NAME} ⚡ סימולטור למידה אינטראקטיבי</footer>`,
       { stats: shellStats() });
 
-    wireShell(onLogout, onBack, { session, screen: `מפת השלבים · ${breadcrumb}` });
+    wireShell(onLogout, onBack, { session, screen: `מפת השלבים · ${mathPlain(breadcrumbText)}` });
     attachFormulaSheet(app, topic, formulaState);
     document.getElementById('back-home').addEventListener('click', onBack);
     app.querySelectorAll('.level-node:not(.locked)').forEach(n => {
@@ -171,7 +172,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // סרגל לחצני הכתיב: רק בשדה מספרי, ורק בנושא שלא כיבה אותו (topic.answerTools === false)
     const useTools = q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
-    const breadcrumb = mathHtml(sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || ''));
+    const breadcrumbText = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
+    const breadcrumb = mathHtml(breadcrumbText);
     const dotColor = sub.color || 'var(--px-brand)';
     // הזירה מוצגת "פתוחה" (סטטית) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
     const { svg } = topic.render(level, false);
@@ -242,7 +244,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       </div>`,
       { stats: shellStats() });
 
-    wireShell(onLogout, onBack, { session, screen: `מסך תרגול · ${breadcrumb} · שלב ${localLevel}` });
+    wireShell(onLogout, onBack, { session, screen: `מסך תרגול · ${mathPlain(breadcrumbText)} · שלב ${localLevel}` });
     attachFormulaSheet(app, topic, formulaState);
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
     document.getElementById('hint-btn').addEventListener('click', () => showHint(level));

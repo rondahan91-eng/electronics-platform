@@ -164,21 +164,32 @@ export function expressionMarkup(raw) {
   const peek = () => tokens[p];
   const eatOp = v => { if (peek() && peek().t === 'op' && peek().v === v) { p += 1; return true; } return false; };
   const wrap = nd => (nd.k === 'bin' && (nd.op === '+' || nd.op === '-') ? `(${show(nd)})` : show(nd));
-  // מספר בכתיב מדעי (4×10⁻⁴) שנכפל באחר נכנס לסוגריים, כדי ש-"9×10⁹ × 2×10⁻⁸" לא יהיה מבלבל
-  const wrapMul = nd => (nd.k === 'num' && formatParsed(nd.v).includes('×') ? `(${show(nd)})` : wrap(nd));
-  const strip = nd => (nd.k === 'paren' ? show(nd.e) : show(nd));
   const supText = digits => String(digits).split('').map(c => TO_SUP[c] || c).join('');
+  // מספר כפי שהוקלד (עד 15 ספרות), בלי עיגול ל-6 ספרות; גדול/קטן מאוד בכתיב מדעי
+  const numText = v => {
+    if (v === 0) return '0';
+    const a = Math.abs(v);
+    const sign = v < 0 ? '−' : '';
+    if (a >= 0.001 && a < 1e6) return sign + String(a);
+    const [m, e] = a.toExponential().split('e');
+    return `${sign}${m}×10${supText(parseInt(e, 10))}`;
+  };
+  // מספר בכתיב מדעי (4×10⁻⁴) שנכפל או מועלה בחזקה נכנס לסוגריים: "9×10⁹ × 2×10⁻⁸", "(4×10⁻⁴)²"
+  const isSci = nd => nd.k === 'num' && numText(nd.v).includes('×');
+  const wrapMul = nd => (isSci(nd) ? `(${show(nd)})` : wrap(nd));
+  const strip = nd => (nd.k === 'paren' ? show(nd.e) : show(nd));
   function show(nd) {
     switch (nd.k) {
-      case 'num': return formatParsed(nd.v);
+      case 'num': return numText(nd.v);
       case 'neg': return `−${wrap(nd.e)}`;
       case 'paren': return `(${show(nd.e)})`;
       case 'bin':
         if (nd.op === '/') return `⟦${strip(nd.l)}⁄${strip(nd.r)}⟧`;
         if (nd.op === '*') return `${wrapMul(nd.l)} × ${wrapMul(nd.r)}`;
         if (nd.op === '^') {
-          const base = (nd.l.k === 'num' || nd.l.k === 'paren') ? show(nd.l) : `(${show(nd.l)})`;
-          const e = nd.r;
+          const base = (nd.l.k === 'paren' || (nd.l.k === 'num' && !isSci(nd.l))) ? show(nd.l) : `(${show(nd.l)})`;
+          // normalize() הופך כל כתיב עילי ל-^(…): חושפים את הסוגריים כדי לזהות חזקה שלמה
+          const e = nd.r.k === 'paren' ? nd.r.e : nd.r;
           if (e.k === 'num' && Number.isInteger(e.v) && e.v >= 0) return base + supText(e.v);
           if (e.k === 'neg' && e.e.k === 'num' && Number.isInteger(e.e.v) && e.e.v >= 0) return `${base}⁻${supText(e.e.v)}`;
           return `${base}^(${show(e)})`;
@@ -311,7 +322,7 @@ export function mountAnswerToolbar(input, host) {
       b.textContent = label;
     }
     b.title = title;
-    b.setAttribute('aria-label', `${id === 'frac' ? 'שבר' : label} ${title}`);
+    b.setAttribute('aria-label', id === 'frac' ? title : `${label} ${title}`);
     b.tabIndex = order.length === 0 ? 0 : -1;
     if (toggle) b.setAttribute('aria-pressed', 'false');
     // לא גונבים פוקוס/סמן מהשדה בלחיצת עכבר/מגע

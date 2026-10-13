@@ -817,13 +817,17 @@ footer.foot {
 
 /* ===== כתיב בקומות (שבר עומד): js/game/mathMarkup.js - ⟦מונה⁄מכנה⟧ ===== */
 .mexpr { unicode-bidi: isolate; }
-.mfrac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle;
+/* stretch: המונה והמכנה ברוחב השבר כולו, כדי שקו השבר (border-bottom של המונה) יימתח מעל המכנה הרחב */
+.mfrac { position: relative; display: inline-flex; flex-direction: column; align-items: stretch; vertical-align: middle;
   margin: 0 .2em; line-height: 1.2; text-align: center; font-family: inherit; }
-.mfrac > .mfn { padding: 0 .3em .08em; border-bottom: 1.5px solid currentColor; }
-.mfrac > .mfd { padding: .08em .3em 0; }
+.mfrac > .mfn { padding: 0 .3em .08em; border-bottom: 1.5px solid currentColor; text-align: center; }
+.mfrac > .mfd { padding: .08em .3em 0; text-align: center; }
+/* "/" נסתר: בהעתקה, בחיפוש ובקורא מסך השבר נקרא Q/t ולא "Qt" */
+.mfrac > .mfs { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mfrac .mfrac { font-size: .92em; }
 .fx-expr .mfrac { font-size: 1.04em; }
-button.ans-key .mfrac { font-size: 12px; margin: 0; line-height: 1.05; vertical-align: -.35em; }
+button.ans-key .mfrac { font-size: 11px; margin: 0; line-height: 1.05; vertical-align: middle; }
+button.ans-key[data-key="frac"] { padding-top: 0; padding-bottom: 0; }
 /* ===== תרשימי המרת יחידות בדף הנוסחאות (כמו בדוגמה: חץ ×, חץ ÷) ===== */
 .fx-cycles { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; justify-content: center; }
 .fx-cycle { flex: 1 1 210px; max-width: 270px; height: auto; direction: ltr; }

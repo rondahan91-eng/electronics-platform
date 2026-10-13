@@ -6,15 +6,22 @@
 // אפשר לשלב שבר בתוך מונה או מכנה, ושבר בתוך סוגריים וחזקה: (⟦r₁⁄r₂⟧)².
 // יחידות מידה (N/C, m/s², N·m²/C²) אינן פעולת חילוק בנוסחה ונשארות בכתיב רגיל.
 //
-// שלושה שימושים:
+// שימושים:
 //   mathHtml(str)      -> מחרוזת HTML (שאר ה-HTML שבטקסט נשאר כפי שהוא) - להזרקה ב-innerHTML
-//   mathFragment(str)  -> DocumentFragment (טקסט + span לשבר) - לבניית DOM בלי innerHTML
-//   mathPlain(str)     -> טקסט רגיל "מונה / מכנה" - לכותרות, aria-label ופיסות טקסט בלבד
+//   mathFragment(str)  -> DocumentFragment - לבניית DOM בלי innerHTML (נוסחאות והערות בדף הנוסחאות)
+//   mathPlain(str)     -> טקסט רגיל "מונה / מכנה" - לכותרות, דיווחים ופיסות טקסט בלבד
 // שבר שלא נסגר כראוי (חסר ⟧ או ⁄) נשאר טקסט כמו שהוא, כך שאין "נפילה" של מסך.
+//
+// כיווניות: שבר הוא אובייקט "ניטרלי" לאלגוריתם ה-bidi, ולכן כל רצף מילים לטיניות/מספרים (בלי
+// עברית) שמכיל שבר נעטף ב-<span class="mexpr" dir="ltr"> (איזולט). פיסוק בקצוות הרצף, וכן מקף
+// עצמאי (" - ") שמפריד בין ביטויים, נשארים בחוץ. תגי HTML וישויות ("&gt;") שבטקסט עוברים כמות
+// שהם ואינם נחתכים; רצף שמכיל תג בלתי מאוזן לא נעטף (ללא איזולט, כמו בטקסט רגיל).
 // ==========================================================================
 export const FR_OPEN = '⟦';
 export const FR_CLOSE = '⟧';
 export const FR_SEP = '⁄';
+
+let FAILED = null;   // אינדקסי ⟦ שנכשלו בפענוח (מונע פענוח חוזר אקספוננציאלי של ⟦⟦⟦…)
 
 function parseFrac(s, i) {            // i = האינדקס שאחרי ⟦
   const num = parseSeq(s, i, FR_SEP);
@@ -34,7 +41,7 @@ function parseSeq(s, i, stop) {
       if (buf) nodes.push(buf);
       return { nodes, next: i + 1 };
     }
-    if (ch === FR_OPEN) {
+    if (ch === FR_OPEN && !FAILED.has(i)) {
       const r = parseFrac(s, i + 1);
       if (r) {
         if (buf) { nodes.push(buf); buf = ''; }
@@ -42,6 +49,7 @@ function parseSeq(s, i, stop) {
         i = r.next;
         continue;
       }
+      FAILED.add(i);
     }
     buf += ch;
     i += 1;
@@ -52,31 +60,58 @@ function parseSeq(s, i, stop) {
 }
 
 function parseMath(str) {
-  const r = parseSeq(String(str == null ? '' : str), 0, null);
-  return r ? r.nodes : [String(str)];
+  const s = String(str == null ? '' : str);
+  FAILED = new Set();
+  const r = parseSeq(s, 0, null);
+  FAILED = null;
+  return r ? r.nodes : [s];
 }
 
 export function hasMath(str) {
   return typeof str === 'string' && str.includes(FR_OPEN) && str.includes(FR_SEP);
 }
 
-function toHtml(nodes) {
-  return nodes.map(n => (typeof n === 'string'
-    ? n
-    : `<span class="mfrac" dir="ltr"><span class="mfn">${toHtml(n.num).trim()}</span><span class="mfd">${toHtml(n.den).trim()}</span></span>`)).join('');
+const NEEDS_PARENS = /[\s+\-−·×*=]/;
+function toPlain(nodes, spoken) {
+  return nodes.map(n => {
+    if (typeof n === 'string') return n;
+    const a = toPlain(n.num, spoken).trim();
+    const b = toPlain(n.den, spoken).trim();
+    if (spoken) return `${a} חלקי ${b}`;
+    return `${NEEDS_PARENS.test(a) ? `(${a})` : a} / ${NEEDS_PARENS.test(b) ? `(${b})` : b}`;
+  }).join('');
 }
 
-// ---- בידוד כיווניות. שבר הוא אובייקט "ניטרלי" בעיני אלגוריתם ה-bidi: בלי מעטפת, בתוך פסקה עברית
-// הנוסחה "Q = ⟦…⟧" הייתה מוצגת בסדר הפוך. לכן כל רצף של מילים לטיניות/מספרים (בלי עברית)
-// שמכיל שבר נעטף ב-<span dir="ltr"> (איזולט), וסימני פיסוק בקצותיו נשארים בחוץ.
+export function mathPlain(str) {
+  return hasMath(str) ? toPlain(parseMath(str), false) : (str == null ? '' : String(str));
+}
+
+const attr = s => s.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+// שבר: role="math" + aria-label ("Q חלקי t") לקורא מסך; מקף נסתר (mfs) כדי שהעתקה/חיפוש יקבלו Q/t.
+function fracHtml(n) {
+  const label = attr(toPlain([n], true));
+  return `<span class="mfrac" dir="ltr" role="math" aria-label="${label}">`
+    + `<span class="mfn" aria-hidden="true">${toHtml(n.num).trim()}</span>`
+    + '<span class="mfs" aria-hidden="true">/</span>'
+    + `<span class="mfd" aria-hidden="true">${toHtml(n.den).trim()}</span></span>`;
+}
+
+function toHtml(nodes) {
+  return nodes.map(n => (typeof n === 'string' ? n : fracHtml(n))).join('');
+}
+
+// ---- בידוד כיווניות
 const HEB = /[֐-׿]/;
-const TAGLIKE = /<\/?[A-Za-z]|="[^"]*"?>?|\/>/;     // חלק מתג HTML: לא נוגעים
+const DASH_ONLY = /^[-–—]+$/;
+const PIECE = /<\/?[A-Za-z][^>]*>|&#?[A-Za-z0-9]+;|\s+|[^\s<&]+|[<&]/g;
+const VOID_TAG = /^<(br|hr|img|wbr|input)\b/i;
 
 function chunkify(nodes) {
   const out = [];
   let cur = null;
   const push = () => { if (cur) { out.push(cur); cur = null; } };
-  const fresh = () => ({ ws: false, parts: [], heb: false, frac: false });
+  const fresh = () => ({ ws: false, parts: [], heb: false, frac: false, open: 0, close: 0 });
   nodes.forEach(n => {
     if (typeof n !== 'string') {
       if (!cur) cur = fresh();
@@ -84,11 +119,21 @@ function chunkify(nodes) {
       cur.frac = true;
       return;
     }
-    (n.match(/\s+|\S+/g) || []).forEach(piece => {
+    (n.match(PIECE) || []).forEach(piece => {
       if (/^\s+$/.test(piece)) { push(); out.push({ ws: true, text: piece }); return; }
       if (!cur) cur = fresh();
+      if (piece[0] === '<' && piece.length > 1 && /[A-Za-z/]/.test(piece[1])) {      // תג HTML: שקוף
+        cur.parts.push({ raw: piece });
+        if (piece.startsWith('</')) cur.close += 1;
+        else if (!VOID_TAG.test(piece) && !piece.endsWith('/>')) cur.open += 1;
+        return;
+      }
+      if (piece[0] === '&' && piece.length > 2 && piece.endsWith(';')) {            // ישות HTML: שקופה
+        cur.parts.push({ raw: piece });
+        return;
+      }
       cur.parts.push(piece);
-      if (HEB.test(piece) || TAGLIKE.test(piece)) cur.heb = true;
+      if (HEB.test(piece) || DASH_ONLY.test(piece)) cur.heb = true;               // מקף עצמאי = פיסוק עברי
     });
   });
   push();
@@ -107,13 +152,16 @@ function groupRuns(chunks) {
       items.push(chunks[j + 1], chunks[j + 2]);
       j += 2;
     }
-    segs.push({ wrap: items.some(x => !x.ws && x.frac), items });
+    const hasFrac = items.some(x => !x.ws && x.frac);
+    const open = items.reduce((a, x) => a + (x.ws ? 0 : x.open), 0);
+    const close = items.reduce((a, x) => a + (x.ws ? 0 : x.close), 0);
+    segs.push({ wrap: hasFrac && open === close, items });
     i = j + 1;
   }
   return segs;
 }
 
-// מחזיר {pre, items, post}: פיסוק בתחילת/סוף הרצף יוצא מחוץ לאיזולט
+// פיסוק בתחילת/סוף הרצף יוצא מחוץ לאיזולט. מחזיר {pre, post}
 function trimPunct(items) {
   let pre = '';
   let post = '';
@@ -133,7 +181,9 @@ function trimPunct(items) {
 }
 
 function itemsHtml(items) {
-  return items.map(c => (c.ws ? c.text : c.parts.map(p => (typeof p === 'string' ? p : toHtml([p]))).join(''))).join('');
+  return items.map(c => (c.ws
+    ? c.text
+    : c.parts.map(p => (typeof p === 'string' ? p : (p.raw !== undefined ? p.raw : fracHtml(p)))).join(''))).join('');
 }
 
 function topHtml(nodes) {
@@ -155,18 +205,4 @@ export function mathFragment(str, doc = document) {
   const tpl = doc.createElement('template');
   tpl.innerHTML = mathHtml(str);
   return tpl.content;
-}
-
-const NEEDS_PARENS = /[\s+\-−·×*=]/;
-function toPlain(nodes) {
-  return nodes.map(n => {
-    if (typeof n === 'string') return n;
-    const a = toPlain(n.num).trim();
-    const b = toPlain(n.den).trim();
-    return `${NEEDS_PARENS.test(a) ? `(${a})` : a} / ${NEEDS_PARENS.test(b) ? `(${b})` : b}`;
-  }).join('');
-}
-
-export function mathPlain(str) {
-  return hasMath(str) ? toPlain(parseMath(str)) : (str == null ? '' : String(str));
 }

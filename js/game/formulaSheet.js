@@ -1,10 +1,13 @@
 // ==========================================================================
 // formulaSheet.js - בועה צפה "דף נוסחאות" למסכי התרגול של נושא.
 //
-// חוזה: topic.formulas = מערך סעיפים, כל סעיף { title, items: [{ label, expr?, note? }] }
+// חוזה: topic.formulas = מערך סעיפים, כל סעיף { title, items: [{ label, expr?, note?, convert? }] }
 //   label = שם קצר בעברית, expr = הנוסחה (LTR, בשורה משלה - אותיות לטיניות, מספרים וסמלים
 //   בלבד, בלי מילים בעברית), note = הסבר קצר בעברית (אפשר לשלב בו סמלים לטיניים).
 //   expr אופציונלי: פריט בלי expr מוצג כשורת כלל/הסבר.
+//   חילוק נכתב בקומות: ⟦מונה⁄מכנה⟧ (ראו mathMarkup.js) - ב-expr, וגם ב-label וב-note.
+//   convert = [{ small, big, factor }]: תרשים המרת יחידות (היחידה הקטנה משמאל, הגדולה מימין;
+//   החץ העליון מהגדולה אל הקטנה = כפל ב-factor, התחתון מהקטנה אל הגדולה = חילוק ב-factor).
 // כשאין topic.formulas - לא מוצגת בועה. כל נושא חדש צריך להגדיר formulas (ראו
 // staticChargeFormulas.js כדוגמה): הנוסחאות מוצגות אחת אחרי השנייה, בלי לשוניות.
 //
@@ -117,6 +120,12 @@ function convertCycles(list) {
   return wrap;
 }
 
+// טקסט שיכול להכיל שבר בקומות (⟦מונה⁄מכנה⟧): דרך mathMarkup; אחרת הבידוד הרגיל של appendMixed
+function appendRich(node, text) {
+  if (hasMath(text)) { node.appendChild(mathFragment(text)); return node; }
+  return appendMixed(node, text);
+}
+
 let current = null; // המופע הפעיל (בועה אחת לכל היותר)
 
 // עטיפה בטוחה: טעות בנתוני הנוסחאות של נושא לא אמורה להפיל את מסך התרגול עצמו -
@@ -181,7 +190,7 @@ function build(container, topic, sections, state) {
     secEl.appendChild(el('h4', 'fx-section-title', sec.title));
     (sec.items || []).forEach(it => {
       const row = el('div', 'fx-item');
-      row.appendChild(appendMixed(el('div', 'fx-label'), it.label));
+      row.appendChild(appendRich(el('div', 'fx-label'), it.label));
       if (it.expr) {
         const expr = el('div', 'fx-expr');
         expr.setAttribute('dir', 'ltr');
@@ -189,7 +198,7 @@ function build(container, topic, sections, state) {
         row.appendChild(expr);
       }
       if (Array.isArray(it.convert) && it.convert.length) row.appendChild(convertCycles(it.convert));
-      if (it.note) row.appendChild(appendMixed(el('div', 'fx-note'), it.note));
+      if (it.note) row.appendChild(appendRich(el('div', 'fx-note'), it.note));
       secEl.appendChild(row);
     });
     body.appendChild(secEl);
