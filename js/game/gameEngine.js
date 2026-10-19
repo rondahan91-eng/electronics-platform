@@ -64,8 +64,9 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     if (autoDeckTimer) { clearTimeout(autoDeckTimer); autoDeckTimer = null; }
     if (deck) deck.close();
   };
+  let hadAttemptsAtMount = false; // תלמיד/ה שכבר ניסו בנושא (גם במכשיר אחר): המצגת כבר לא קופצת, ויש את הלחצן
   const maybeAutoDeck = () => {
-    if (!deck || deck.autoShown() || deck.isOpen() || autoDeckTimer) return;
+    if (!deck || deck.autoShown() || deck.isOpen() || autoDeckTimer || hadAttemptsAtMount) return;
     autoDeckTimer = setTimeout(() => { autoDeckTimer = null; deck.markAutoShown(); deck.open({ auto: true }); }, 450);
   };
   const origBack = onBack, origLogout = onLogout;
@@ -76,6 +77,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       const all = await fetchMyProgress(session.studentId);
       state.allProgress = all || {};
       state.progress = (all && all[topic.id]) || { highestLevel: 0, levels: {} };
+      hadAttemptsAtMount = Object.values(state.progress.levels || {}).some(l => (l.attempts || 0) > 0);
     } catch (e) { toast('שגיאה בטעינת התקדמות: ' + e.message, true); }
   }
 
@@ -207,7 +209,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const q = level.question;
     // סרגל לחצני הכתיב: רק בשדה מספרי, ורק בנושא שלא כיבה אותו (topic.answerTools === false)
     // שלב עם כמה תשובות (question.lines): שורת בדיקה לכל גודל, בלי שדה יחיד ובלי סרגל כתיב
-    const lines = Array.isArray(q.lines) && q.lines.length ? q.lines : null;
+    // opt-in של הנושא (topic.evaluateLine) ושורות שהן אובייקטים: בנושא הלוגיקה question.lines הוא מערך מחרוזות (שורות תצוגה של המשפט)
+    const lines = (typeof topic.evaluateLine === 'function' && Array.isArray(q.lines) && q.lines.length && typeof q.lines[0] === 'object') ? q.lines : null;
     const useTools = !lines && q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
     const breadcrumbText = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
@@ -305,9 +308,9 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     attachFormulaSheet(app, topic, formulaState);
     wireDeckButtons();
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
-    document.getElementById('hint-btn').addEventListener('click', () => showHint(level));
+    document.getElementById('hint-btn').addEventListener('click', () => showHint(level, 'panel'));
     const arenaHint = document.getElementById('arena-hint-btn');
-    if (arenaHint) arenaHint.addEventListener('click', () => showHint(level));
+    if (arenaHint) arenaHint.addEventListener('click', () => showHint(level, 'arena'));
     const introToggle = document.getElementById('intro-toggle');
     introToggle.addEventListener('click', () => {
       const descEl = document.getElementById('game-intro-desc');
@@ -324,11 +327,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
         // מקלדת הנייד העשרונית אינה כוללת מינוס: הלחצן מוסיף/מסיר מינוס בתחילת השדה
         app.querySelector(`.line-neg[data-key="${l.key}"]`).addEventListener('click', () => {
           const v = lineInput.value.trim();
-          lineInput.value = /^[-−]/.test(v) ? v.replace(/^[-−]\s*/, '') : '-' + v;
+          lineInput.value = /^[-−+]/.test(v) ? v.replace(/^[-−+]\s*/, '') : '-' + v;
           lineInput.focus();
         });
       });
-      document.getElementById(`line-input-${lines[0].key}`).focus();
+      // הפוקוס לא גולל את הדף: במעגל עם רמזים על גביו, המעגל צריך להישאר בתצוגה
+      if (topic.hintsOnCircuit) { const wrap = app.querySelector('.game-wrap'); if (wrap) wrap.scrollIntoView({ block: 'start' }); }
+      document.getElementById(`line-input-${lines[0].key}`).focus({ preventScroll: true });
     } else {
       document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));
       const input = document.getElementById('answer-input');
@@ -357,22 +362,28 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     if (elapsedEl) elapsedEl.textContent = fmtTime(Math.round((performance.now() - state.startTs) / 1000));
   }
 
-  function showHint(level) {
+  function showHint(level, source) {
     const hints = level.question.hints || [];
     const card = document.getElementById('hints-card');
     if (!hints.length || !card) return;
+    // כל הרמזים כבר פתוחים: אין מה לצייר מחדש (בלי הבהוב של הרמז האחרון על המעגל)
+    if (topic.hintsOnCircuit && state.hintsShown >= hints.length) return;
     state.hintsShown = Math.min(state.hintsShown + 1, hints.length);
     card.style.display = 'block';
     document.getElementById('hints-count').textContent = state.hintsShown;
     const arenaCount = document.getElementById('arena-hint-count');
     if (arenaCount) arenaCount.textContent = state.hintsShown;
+    const arenaBtn = document.getElementById('arena-hint-btn');
+    if (arenaBtn) arenaBtn.setAttribute('aria-label', `רמז: מופיע על גבי המעגל. נפתחו ${state.hintsShown} מתוך ${hints.length}`);
     document.getElementById('hint-list').innerHTML = hints.slice(0, state.hintsShown)
       .map(h => `<div class="hint-item"><span class="dot"></span><span class="text">${mathHtml(h)}</span></div>`).join('');
     // רמזים על גבי המעגל: מציירים מחדש את הזירה עם n הרמזים הפתוחים (הציור, המשוואות...)
     if (topic.hintsOnCircuit) {
       const stage = document.getElementById('circuit-stage');
       if (stage) stage.innerHTML = topic.render(level, !!state.solvedLock, { hints: state.hintsShown }).svg;
-      return; // לא גוללים אל כרטיס הרמזים: התלמיד/ה צריכים לראות את מה שנוסף על המעגל
+      // לא גוללים אל כרטיס הרמזים: התלמיד/ה צריכים לראות את מה שנוסף על המעגל. מהלחצן שבתוך הפאנל (רחוק מהמעגל) מביאים את המעגל לתצוגה
+      if (source === 'panel' && stage) stage.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return;
     }
     revealNearest(card);
   }
@@ -386,7 +397,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const parsed = parseAnswer(input.value);
     if (!parsed.ok) {
       fb.className = 'line-feedback bad show';
-      fb.textContent = parsed.error || 'נא להזין מספר תקין.';
+      fb.textContent = 'נא להזין מספר, למשל 2.5 או -3 (אפשר להשתמש בלחצן ± למינוס).';
       return;
     }
     const result = topic.evaluateLine(level, line.key, parsed.value);
@@ -402,7 +413,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       fb.className = 'line-feedback ok show';
       fb.textContent = 'מאושר ✓';
       const next = (level.question.lines || []).find(l => !state.linesDone[l.key]);
-      if (next) document.getElementById(`line-input-${next.key}`).focus();
+      if (next) document.getElementById(`line-input-${next.key}`).focus({ preventScroll: true });
       else handleSuccess(level);
       return;
     }

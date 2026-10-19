@@ -18,7 +18,7 @@ function meshSuccessMessage(level, elapsed) {
     const dir = m.IR2 > 0 ? 'כלפי מטה, בכיוון I₁' : 'כלפי מעלה, בכיוון I₂';
     notes.push(`זרם הענף המשותף הוא ההפרש בין זרמי הלולאה, והוא זורם ${dir}.`);
   }
-  return `✅ מצוין! כל הזרמים אושרו (זמן פתרון: ${fmtTime(elapsed)}).${notes.length ? ' ' + notes.join(' ') : ''}`;
+  return `מצוין! כל הזרמים אושרו (זמן פתרון: ${fmtTime(elapsed)}).${notes.length ? ' ' + notes.join(' ') : ''}`;
 }
 
 export const MESH_TOPIC = {

@@ -884,3 +884,13 @@ button.deck-x { width: 36px; height: 36px; padding: 0; font-size: 22px; line-hei
 .arena-hint-btn:hover { background: var(--px-canvas); color: var(--px-amber-ink); }
 /* ± בשורת תשובה: הוספה והסרה של מינוס (מקלדת עשרונית בנייד בלי מינוס) */
 .qa-line .line-neg { padding: 9px 14px; font-size: 16px; font-weight: 700; min-width: 42px; }
+
+/* ---------- סבב תיקונים 2: מצגת וכפתורי רמז ---------- */
+/* לחצן הרמז על המעגל בצד הימני (RTL): בצד השמאלי יושב כרטיס הסטטיסטיקה הצף ומכסה אותו */
+.arena-hint-btn { inset-inline-end: auto; inset-inline-start: 12px; }
+.hint-item .text span[dir="ltr"] { white-space: nowrap; }
+.deck-count { font-family: var(--font-main); }
+.deck-newtab { font-size: 13px; color: var(--px-brand-deep); text-decoration: underline; white-space: nowrap; }
+.deck-loading.failed { background: #262c56; pointer-events: auto; }
+.deck-loading.failed div { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 0 18px; }
+.deck-loading.failed a { color: #fff; text-decoration: underline; }

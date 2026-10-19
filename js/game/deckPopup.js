@@ -19,8 +19,11 @@ function writeStore(key, value) {
   try { localStorage.setItem(key, String(value)); } catch (e) { /* פרטיות/מכסה: נשארים עם המראה בזיכרון */ }
 }
 
+// מראה בזיכרון ברמת המודול: שורד יציאה מהנושא וכניסה חוזרת (ולא מתערבב בין תלמידים: מפתח לפי storageKey)
+const MEMORY = new Map();
+
 export function createDeckViewer({ src, title, storageKey, persist = true }) {
-  const memory = {};
+  const memory = persist ? (MEMORY.get(storageKey) || MEMORY.set(storageKey, {}).get(storageKey)) : {};
   const get = (k, d) => {
     if (k in memory) return memory[k];
     if (persist) { const v = readStore(`${storageKey}.${k}`); if (v !== null) return v; }
@@ -81,9 +84,10 @@ export function createDeckViewer({ src, title, storageKey, persist = true }) {
         </div>
         <div class="deck-foot">
           <div class="deck-nav">
-            <button type="button" class="secondary" id="deck-prev">→ שקף קודם</button>
+            <button type="button" class="secondary" id="deck-prev">שקף קודם</button>
             <span class="deck-count" id="deck-count" aria-live="polite">שקף ${startSlide + 1}</span>
-            <button type="button" class="secondary" id="deck-next">שקף הבא ←</button>
+            <button type="button" class="secondary" id="deck-next">שקף הבא</button>
+            <a class="deck-newtab" id="deck-newtab" href="${src}#${startSlide + 1}" target="_blank" rel="noopener">פתיחה במסך מלא</a>
           </div>
           <button type="button" id="deck-done">${auto ? 'סיימנו, חוזרים לנסות שוב' : 'סגירת המצגת'}</button>
         </div>
@@ -122,15 +126,18 @@ export function createDeckViewer({ src, title, storageKey, persist = true }) {
         if (stage.index !== slide) { slide = stage.index; set('slide', slide); }
         const text = `שקף ${slide + 1}${total ? ' מתוך ' + total : ''}`;
         if (countEl.textContent !== text) countEl.textContent = text;
+        const nt = overlay.querySelector('#deck-newtab');
+        if (nt) nt.setAttribute('href', `${src}#${slide + 1}`);
       } else if (!ready && loadingEl && Date.now() - startedAt > FAIL_AFTER_MS) {
-        loadingEl.innerHTML = `לא הצלחנו לטעון את המצגת. <a href="${src}#${startSlide + 1}" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;">פתיחה בלשונית חדשה</a>`;
-        loadingEl.style.pointerEvents = 'auto';
+        loadingEl.classList.add('failed');
+        loadingEl.innerHTML = `<div>לא הצלחנו לטעון את המצגת. <a href="${src}#${startSlide + 1}" target="_blank" rel="noopener">פתיחה בלשונית חדשה</a></div>`;
       }
     };
     const loop = () => { sync(); if (overlay) timer = setTimeout(loop, ready ? POLL_SLOW_MS : POLL_FAST_MS); };
     timer = setTimeout(loop, POLL_FAST_MS);
 
-    const withStage = fn => { const st = stageOf(iframe); if (st) { fn(st); sync(); } };
+    // אחרי לחיצה על לחצן הניווט הפוקוס חוזר למצגת, כדי שהחצים במקלדת ימשיכו לעבוד
+    const withStage = fn => { const st = stageOf(iframe); if (st) { fn(st); sync(); try { iframe.contentWindow.focus(); } catch (e) { /* לא באותו origin */ } } };
     overlay.querySelector('#deck-prev').addEventListener('click', () => withStage(st => st.prev()));
     overlay.querySelector('#deck-next').addEventListener('click', () => withStage(st => st.next()));
     overlay.querySelector('#deck-x').addEventListener('click', close);

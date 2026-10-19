@@ -47,7 +47,7 @@ const M_SIGN = 'נראה שהתעלמתם מהקוטביות ההפוכה: מק�
 const M_COUPLE = `בנגד המשותף זרם הלולאה השכנה נכנס עם סימן מינוס: ${ltr('−R₂·I₂')} במשוואה הראשונה ו-${ltr('−R₂·I₁')} בשנייה. הסימן אצלכם שגוי.`;
 const M_ALONE_1 = 'התעלמתם מהלולאה השכנה. R₂ משותף לשתי הלולאות, ולכן זרם הלולאה השנייה, I₂, נכנס גם למשוואה של לולאה 1.';
 const M_ALONE_2 = 'התעלמתם מהלולאה השכנה. R₂ משותף לשתי הלולאות, ולכן זרם הלולאה הראשונה, I₁, נכנס גם למשוואה של לולאה 2.';
-const SIGN_I = 'הגודל נכון, אבל הסימן הפוך. זרם לולאה שלילי פירושו שהזרם זורם בפועל נגד כיוון השעון שנבחר.';
+const SIGN_I = 'הגודל נכון, אבל הסימן הפוך. זרם לולאה שלילי פירושו שהזרם זורם בפועל נגד כיוון הסבב שנבחר, כלומר נגד כיוון השעון.';
 const SIGN_R2 = 'הגודל נכון, אבל הסימן הפוך. חיובי פירושו כלפי מטה, בכיוון I₁, ושלילי כלפי מעלה, בכיוון I₂.';
 
 function buildLevel(localId) {
@@ -167,6 +167,6 @@ export function evaluateMeshLine(level, key, val) {
 }
 
 export function formatMeshAnswer(level) {
-  const parts = level.question.lines.map(l => `${l.key === 'IR2' ? 'I(R₂)' : l.key === 'I1' ? 'I₁' : 'I₂'} = ${num(l.answer)} A`);
+  const parts = level.question.lines.map(l => `<span style="white-space:nowrap">${l.key === 'IR2' ? 'I(R₂)' : l.key === 'I1' ? 'I₁' : 'I₂'} = ${num(l.answer)} A</span>`);
   return parts.join(' · ');
 }
