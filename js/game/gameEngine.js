@@ -9,6 +9,14 @@
 // topic.progression (אופציונלי): כיתוב מדרגת הקושי במפת השלבים. topic.formatAnswer(level) (אופציונלי):
 // איך מוצגת התשובה הנכונה אחרי פתרון (ברירת מחדל: answer + unit).
 //
+// הרחבות אופציונליות לנושא שבו כל שלב דורש כמה תשובות (למשל כמה זרמים), ראו meshLevelGenerator.js:
+//   question.lines = [{key, label, unit}]  - שורת תשובה וכפתור בדיקה לכל גודל; אין שדה תשובה יחיד ואין סרגל כתיב.
+//                    topic.evaluateLine(level, key, value) -> {outcome:'correct'|'incorrect', message}. השלב נפתר רק כשכל השורות אושרו.
+//   topic.hintsOnCircuit = true - הרמזים נבנים על גבי הציור: topic.render(level, energized, {hints: n}) מצייר את n הרמזים (הטקסט
+//                    של question.hints מוצג גם בכרטיס הרמזים).
+//   topic.theoryDeck = {src, title} - מצגת בחלון צף (deckPopup.js): קופצת אוטומטית פעם אחת, בתשובה השגויה הראשונה של
+//                    התלמיד/ה בנושא, ולחצן "המצגת" פותח אותה שוב בשקף שבו עצרו.
+//
 // opts.subtopic (אופציונלי) = {levelStart, levelEnd, chapterN, chapterTitle,
 // n, title, color} - "חלון" תת-נושא על טווח שלבים בתוך ה-topic (ראו
 // home.js). כשלא סופק (עדיין המצב ב-preview מהדשבורד, עד שלב 6) - נופלים
@@ -21,6 +29,7 @@ import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
 import { attachFormulaSheet } from './formulaSheet.js';
 import { parseAnswer, mountAnswerToolbar } from './answerInput.js';
 import { mathHtml, mathPlain } from './mathMarkup.js';
+import { createDeckViewer } from './deckPopup.js';
 
 export async function mountTopic(app, session, topic, onBack, onLogout, opts = {}) {
   const preview = !!opts.preview;
@@ -39,6 +48,29 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   let answerTools = null; // סרגל לחצני הכתיב של השלב הפתוח (answerInput.js)
   // בועת דף הנוסחאות (topic.formulas): מצב הפתיחה נשמר בין שלבים; הבועה עצמה נבנית מחדש אחרי כל רינדור.
   const formulaState = { open: false };
+  // מצגת עזר של הנושא (topic.theoryDeck): נשמרים פר-תלמיד/ה: השקף האחרון, והאם כבר קפצה אוטומטית. בתצוגה מקדימה למורה - רק בזיכרון.
+  const deck = topic.theoryDeck
+    ? createDeckViewer({
+      src: topic.theoryDeck.src, title: topic.theoryDeck.title, persist: !preview,
+      storageKey: `electro.deck.${session.studentId || session.username || 'anon'}.${topic.id}`,
+    })
+    : null;
+  const deckBtn = (cls = 'secondary') => (deck ? `<button type="button" class="${cls} deck-open-btn" data-deck-open>📖 המצגת</button>` : '');
+  const wireDeckButtons = () => app.querySelectorAll('[data-deck-open]').forEach(b => b.addEventListener('click', () => { playClick(); deck.open(); }));
+  // תשובה שגויה ראשונה אי-פעם בנושא: המצגת קופצת בחלון גדול (פעם אחת בלבד). "פעם אחת" נרשם רק כשהחלון באמת נפתח,
+  // והטיימר מתבטל ביציאה מהשלב/מהנושא/מהמערכת, כדי שהחלון לא יקפוץ מעל מסך אחר.
+  let autoDeckTimer = null;
+  const leaveGuard = () => {
+    if (autoDeckTimer) { clearTimeout(autoDeckTimer); autoDeckTimer = null; }
+    if (deck) deck.close();
+  };
+  const maybeAutoDeck = () => {
+    if (!deck || deck.autoShown() || deck.isOpen() || autoDeckTimer) return;
+    autoDeckTimer = setTimeout(() => { autoDeckTimer = null; deck.markAutoShown(); deck.open({ auto: true }); }, 450);
+  };
+  const origBack = onBack, origLogout = onLogout;
+  onBack = (...a) => { leaveGuard(); return origBack(...a); };
+  onLogout = (...a) => { leaveGuard(); return origLogout(...a); };
   if (!preview) {
     try {
       const all = await fetchMyProgress(session.studentId);
@@ -88,6 +120,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   }
 
   function renderMap() {
+    leaveGuard();
     const highestLocal = windowHighestLocal();
     const doneCount = (() => { let c = 0; for (let i = 1; i <= windowSize; i++) if (state.progress.levels[toGlobal(i)]?.solved) c++; return c; })();
     const avgSecs = windowAvgSeconds();
@@ -133,6 +166,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
           <span class="rule"></span>
           <span class="progression">${progression}</span>
         </div>
+        ${deck ? `<div class="deck-row">${deckBtn()}<span class="deck-row-note">המצגת נפתחת בשקף שבו עצרתם בפעם האחרונה.</span></div>` : ''}
         <div class="level-grid">${nodes.join('')}</div>
         ${!preview ? `
         <div class="map-next-card">
@@ -149,6 +183,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
     wireShell(onLogout, onBack, { session, screen: `מפת השלבים · ${mathPlain(breadcrumbText)}` });
     attachFormulaSheet(app, topic, formulaState);
+    wireDeckButtons();
     document.getElementById('back-home').addEventListener('click', onBack);
     app.querySelectorAll('.level-node:not(.locked)').forEach(n => {
       n.addEventListener('click', () => { playClick(); openLevel(parseInt(n.dataset.level, 10)); });
@@ -158,6 +193,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   }
 
   function openLevel(id) {
+    leaveGuard();
     cleanupLevel();
     state.levelId = id;
     state.startTs = performance.now();
@@ -170,14 +206,34 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const level = topic.generateLevel(state.levelId);
     const q = level.question;
     // סרגל לחצני הכתיב: רק בשדה מספרי, ורק בנושא שלא כיבה אותו (topic.answerTools === false)
-    const useTools = q.inputMode !== 'text' && topic.answerTools !== false;
+    // שלב עם כמה תשובות (question.lines): שורת בדיקה לכל גודל, בלי שדה יחיד ובלי סרגל כתיב
+    const lines = Array.isArray(q.lines) && q.lines.length ? q.lines : null;
+    const useTools = !lines && q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
     const breadcrumbText = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
     const breadcrumb = mathHtml(breadcrumbText);
     const dotColor = sub.color || 'var(--px-brand)';
     // הזירה מוצגת "פתוחה" (סטטית) עד שהתלמיד/ה עונים נכון - ראו handleSuccess.
-    const { svg } = topic.render(level, false);
+    const { svg } = topic.render(level, false, { hints: 0 });
     const lv0 = state.progress.levels[level.id] || {};
+    state.linesDone = {};
+    const linesHtml = lines ? `
+            <div class="qa-lines" id="qa-lines">
+              ${lines.map(l => `<div class="qa-line" data-key="${l.key}">
+                <label for="line-input-${l.key}">${mathHtml(l.label)}</label>
+                <div class="qa-line-row">
+                  <div class="answer-shell">
+                    <input type="text" inputmode="decimal" dir="ltr" id="line-input-${l.key}" data-key="${l.key}" placeholder="מספר (גם שלילי)" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="line-fb-${l.key}">
+                    ${l.unit ? `<span class="answer-unit">${l.unit}</span>` : ''}
+                  </div>
+                  <button type="button" class="line-neg secondary" data-key="${l.key}" aria-label="החלפת סימן: פלוס או מינוס" title="החלפת סימן">±</button>
+                  <button type="button" class="line-check" data-key="${l.key}" aria-label="בדיקת ${mathPlain(l.label)}">בדיקה</button>
+                  <span class="line-status" id="line-status-${l.key}" aria-hidden="true"></span>
+                </div>
+                <div class="line-feedback" id="line-fb-${l.key}" role="status" aria-live="polite"></div>
+              </div>`).join('')}
+            </div>
+            <div class="qa-row qa-row-tools"><button class="secondary" id="hint-btn" type="button">רמז</button>${deckBtn()}</div>` : '';
     // נושא יכול להצהיר על question.data = [{label, value}] - כל נתון בשורה נפרדת
     // משלו מתחת לשאלה (ולא משולב בתוך משפט). בלי data - לא מוצג דבר.
     const dataRows = Array.isArray(q.data) && q.data.length
@@ -202,17 +258,18 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
           <p class="game-intro-desc" id="game-intro-desc" hidden>${mathHtml(level.description)}</p>
         </div>
 
-        <div class="arena-wrap">
+        <div class="arena-wrap${topic.flatStage ? ' flat' : ''}">
           <div class="arena-halo"></div>
           <div class="arena-portal" id="arena-portal">
             <div class="circuit-stage" id="circuit-stage">${svg}</div>
           </div>
+          ${topic.hintsOnCircuit ? `<button type="button" class="arena-hint-btn" id="arena-hint-btn" aria-label="רמז: מופיע על גבי המעגל">💡 רמז <span id="arena-hint-count">0</span>/${(q.hints || []).length}</button>` : ''}
         </div>
 
         <div class="game-grid">
           <div class="qa-panel glass">
             <div class="qa-question">${mathHtml(q.prompt)}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
-            <div class="qa-row">
+            ${lines ? linesHtml : `<div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>
                 <div class="answer-shell">
@@ -223,8 +280,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
                 </div>
               </div>
               <button id="submit-answer">בדיקה</button>
-              <button class="secondary" id="hint-btn" type="button">רמז</button>
-            </div>
+              <button class="secondary" id="hint-btn" type="button">רמז</button>${deckBtn()}
+            </div>`}
             ${!useTools ? '' : `<div id="answer-tools-host"></div><p class="form-note" style="margin:9px 0 0;">אפשר להקליד מספר רגיל, כתיב מדעי (<code>2.5e-3</code>) או ביטוי עם הלחצנים: <code>×10ⁿ</code>, שבר, חזקה, כפל וחילוק.</p>`}
             <div class="hints-card" id="hints-card" style="display:none;">
               <div class="hints-card-label">רמזים · <span id="hints-count">0</span>/${(q.hints || []).length}</div>
@@ -246,9 +303,11 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
     wireShell(onLogout, onBack, { session, screen: `מסך תרגול · ${mathPlain(breadcrumbText)} · שלב ${localLevel}` });
     attachFormulaSheet(app, topic, formulaState);
+    wireDeckButtons();
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
     document.getElementById('hint-btn').addEventListener('click', () => showHint(level));
-    document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));
+    const arenaHint = document.getElementById('arena-hint-btn');
+    if (arenaHint) arenaHint.addEventListener('click', () => showHint(level));
     const introToggle = document.getElementById('intro-toggle');
     introToggle.addEventListener('click', () => {
       const descEl = document.getElementById('game-intro-desc');
@@ -256,11 +315,28 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       introToggle.setAttribute('aria-expanded', String(!descEl.hidden));
       introToggle.classList.toggle('open', !descEl.hidden);
     });
-    const input = document.getElementById('answer-input');
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(level); });
-    const toolsHost = document.getElementById('answer-tools-host');
-    answerTools = (toolsHost && useTools) ? mountAnswerToolbar(input, toolsHost) : null;
-    input.focus();
+    if (lines) {
+      answerTools = null;
+      lines.forEach(l => {
+        const lineInput = document.getElementById(`line-input-${l.key}`);
+        lineInput.addEventListener('keydown', e => { if (e.key === 'Enter') checkLine(level, l); });
+        app.querySelector(`.line-check[data-key="${l.key}"]`).addEventListener('click', () => checkLine(level, l));
+        // מקלדת הנייד העשרונית אינה כוללת מינוס: הלחצן מוסיף/מסיר מינוס בתחילת השדה
+        app.querySelector(`.line-neg[data-key="${l.key}"]`).addEventListener('click', () => {
+          const v = lineInput.value.trim();
+          lineInput.value = /^[-−]/.test(v) ? v.replace(/^[-−]\s*/, '') : '-' + v;
+          lineInput.focus();
+        });
+      });
+      document.getElementById(`line-input-${lines[0].key}`).focus();
+    } else {
+      document.getElementById('submit-answer').addEventListener('click', () => checkAnswer(level));
+      const input = document.getElementById('answer-input');
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') checkAnswer(level); });
+      const toolsHost = document.getElementById('answer-tools-host');
+      answerTools = (toolsHost && useTools) ? mountAnswerToolbar(input, toolsHost) : null;
+      input.focus();
+    }
 
     // הזדמנות אופציונלית לנושא להריץ אפקט חי בזמן שהשלב פתוח (למשל שעון
     // עוצר) - gameEngine לא יודע/אכפת לו מה זה עושה, רק קורא ל-cleanup בעת יציאה.
@@ -288,9 +364,62 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     state.hintsShown = Math.min(state.hintsShown + 1, hints.length);
     card.style.display = 'block';
     document.getElementById('hints-count').textContent = state.hintsShown;
+    const arenaCount = document.getElementById('arena-hint-count');
+    if (arenaCount) arenaCount.textContent = state.hintsShown;
     document.getElementById('hint-list').innerHTML = hints.slice(0, state.hintsShown)
       .map(h => `<div class="hint-item"><span class="dot"></span><span class="text">${mathHtml(h)}</span></div>`).join('');
+    // רמזים על גבי המעגל: מציירים מחדש את הזירה עם n הרמזים הפתוחים (הציור, המשוואות...)
+    if (topic.hintsOnCircuit) {
+      const stage = document.getElementById('circuit-stage');
+      if (stage) stage.innerHTML = topic.render(level, !!state.solvedLock, { hints: state.hintsShown }).svg;
+      return; // לא גוללים אל כרטיס הרמזים: התלמיד/ה צריכים לראות את מה שנוסף על המעגל
+    }
     revealNearest(card);
+  }
+
+  // ---- שלב עם כמה שורות תשובה (question.lines): כל שורה נבדקת בנפרד, והשלב נפתר כשכולן אושרו
+  function checkLine(level, line) {
+    if (state.solvedLock || state.linesDone[line.key]) return;
+    if (typeof topic.evaluateLine !== 'function') throw new Error(`topic ${topic.id}: question.lines דורש topic.evaluateLine`);
+    const input = document.getElementById(`line-input-${line.key}`);
+    const fb = document.getElementById(`line-fb-${line.key}`);
+    const parsed = parseAnswer(input.value);
+    if (!parsed.ok) {
+      fb.className = 'line-feedback bad show';
+      fb.textContent = parsed.error || 'נא להזין מספר תקין.';
+      return;
+    }
+    const result = topic.evaluateLine(level, line.key, parsed.value);
+    if (result.outcome === 'correct') {
+      state.linesDone[line.key] = true;
+      playClick();
+      const row = app.querySelector(`.qa-line[data-key="${line.key}"]`);
+      row.classList.add('done');
+      input.disabled = true;
+      app.querySelector(`.line-check[data-key="${line.key}"]`).disabled = true;
+      app.querySelector(`.line-neg[data-key="${line.key}"]`).disabled = true;
+      document.getElementById(`line-status-${line.key}`).textContent = '✓';
+      fb.className = 'line-feedback ok show';
+      fb.textContent = 'מאושר ✓';
+      const next = (level.question.lines || []).find(l => !state.linesDone[l.key]);
+      if (next) document.getElementById(`line-input-${next.key}`).focus();
+      else handleSuccess(level);
+      return;
+    }
+    // שגוי: ההודעה מתחת לשורה עצמה, וניסיון נרשם בדיוק כמו בשדה תשובה יחיד
+    playError();
+    fb.className = 'line-feedback bad show';
+    fb.innerHTML = `<span class="fb-tag">≠</span><span class="fb-text">${mathHtml(result.message || '⚡ לא מדויק. בדקו שוב ונסו שוב.')}</span>`;
+    const stage = document.getElementById('circuit-stage');
+    if (stage) { stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 400); }
+    if (!preview) {
+      const lv = state.progress.levels[level.id] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
+      lv.attempts = (lv.attempts || 0) + 1;
+      state.progress.levels[level.id] = lv;
+    }
+    updateStatsCard(level);
+    recordAttempt(level, { solved: false, timeSeconds: null, disqualified: false });
+    maybeAutoDeck();
   }
 
   // מגלל (בעדינות) כך שהמשוב/הרמזים יהיו גלויים גם במסך נמוך שבו שורת הלחצנים דוחקת אותם למטה
@@ -354,6 +483,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     }
     updateStatsCard(level);
     recordAttempt(level, { solved: false, timeSeconds: null, disqualified: false });
+    maybeAutoDeck();
   }
 
   async function recordAttempt(level, payload) {
@@ -385,6 +515,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const answerEl = document.getElementById('answer-input');
     if (submitBtn) submitBtn.disabled = true;
     if (answerEl) answerEl.disabled = true;
+    app.querySelectorAll('.qa-line input, .qa-line button').forEach(el => { el.disabled = true; });
     if (answerTools) answerTools.disable();
     const fb = document.getElementById('qa-feedback');
     fb.className = 'qa-feedback ok show';
@@ -396,7 +527,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // רק עכשיו, לאחר תשובה נכונה, מריצים את האנימציה/מצב ה"אנרגטי" של הזירה,
     // ומדגישים את מסגרת ה"פורטל" סביבה.
     const stageEl = document.getElementById('circuit-stage');
-    if (stageEl) stageEl.innerHTML = topic.render(level, true).svg;
+    if (stageEl) stageEl.innerHTML = topic.render(level, true, { hints: state.hintsShown, noFade: true }).svg;
     const portalEl = document.getElementById('arena-portal');
     if (portalEl) portalEl.classList.add('solved');
 
@@ -426,8 +557,10 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     const hasNext = state.levelId < windowEnd;
     const finishLabel = preview ? 'סיימת את הנושא! חזרה לפאנל הניהול 🏁' : 'סיימת את התת-נושא! חזרה לפרקים 🏁';
     row.innerHTML = `<button id="next-level" class="ground">${hasNext ? 'לשלב הבא →' : finishLabel}</button><button id="retry-level" class="secondary">לנסות שוב</button>`;
-    document.getElementById('submit-answer').disabled = true;
-    document.getElementById('answer-input').disabled = true;
+    const submitEl = document.getElementById('submit-answer');
+    const answerInputEl = document.getElementById('answer-input');
+    if (submitEl) submitEl.disabled = true;
+    if (answerInputEl) answerInputEl.disabled = true;
     if (answerTools) answerTools.disable();
     document.getElementById('next-level').addEventListener('click', () => {
       if (hasNext) openLevel(level.id + 1); else onBack();

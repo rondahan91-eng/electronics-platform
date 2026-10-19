@@ -21,17 +21,25 @@ const TABS = [
   { key: 'students', label: 'תלמידים וסיסמאות' },
 ];
 
-// פרקים בני-תרגול בלבד, כל אחד קשור ל-topicId שממנו נשלף המעקב הכיתתי -
-// גם לפרק עם כמה תת-נושאים (זרם חשמלי) יש topicId משותף אחד לכולם.
+// פרקים בני-תרגול בלבד, כל אחד קשור ל-topicId שממנו נשלף המעקב הכיתתי. לפרק עם כמה תת-נושאים של אותו topic
+// (זרם חשמלי) יש ערך אחד. פרק שיש בו כמה topics שונים (פרק 9: זרמי חוגים ושלבי בוס) מקבל ערך נפרד לכל topic,
+// עם התת-נושאים שלו (subs) - כך המעקב והעיון בכל אחד מהם נשארים נגישים.
 function practicableChapters() {
-  return allChapters()
-    .filter(c => chapterHasPractice(c.item))
-    .map(c => ({
-      key: c.key,
-      label: `${c.item.n}. ${c.item.title}`,
-      topicId: c.item.subs.find(sb => sb.topicId).topicId,
-      item: c.item,
-    }));
+  const out = [];
+  for (const c of allChapters().filter(ch => chapterHasPractice(ch.item))) {
+    const topicIds = [...new Set(c.item.subs.filter(sb => sb.topicId).map(sb => sb.topicId))];
+    for (const topicId of topicIds) {
+      const multi = topicIds.length > 1;
+      out.push({
+        key: multi ? `${c.key}|${topicId}` : c.key,
+        label: `${c.item.n}. ${c.item.title}${multi ? ' · ' + ((TOPICS[topicId] && TOPICS[topicId].title) || topicId) : ''}`,
+        topicId,
+        subs: c.item.subs.filter(sb => sb.topicId === topicId),
+        item: c.item,
+      });
+    }
+  }
+  return out;
 }
 
 function median(nums) {
@@ -312,7 +320,7 @@ export async function mountDashboard(app, session, onLogout) {
   // ------------------------------------------------------------ טאב: עיון ותרגול
   function renderPreviewTab() {
     const chapter = chapters.find(c => c.key === state.pvChapterKey) || chapters[0];
-    const subs = chapter ? (chapter.item.subs || []).filter(sb => sb.topicId) : [];
+    const subs = chapter ? chapter.subs : [];
     const sub = subs[state.pvSubIdx] || subs[0];
     const levelOptions = sub ? Array.from({ length: sub.total }, (_, i) => i + 1) : [];
 
@@ -605,7 +613,7 @@ export async function mountDashboard(app, session, onLogout) {
     if (openBtn) openBtn.addEventListener('click', () => {
       const chapter = chapters.find(c => c.key === state.pvChapterKey) || chapters[0];
       const topic = TOPICS[chapter.topicId];
-      const subs = (chapter.item.subs || []).filter(sb => sb.topicId);
+      const subs = chapter.subs;
       const sub = subs[state.pvSubIdx] || subs[0];
       if (!topic || !sub) return;
       const subtopic = {

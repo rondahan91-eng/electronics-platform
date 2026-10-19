@@ -36,6 +36,7 @@ import {
 import { fmtTime } from './ui.js';
 import { STATIC_CHARGE_FORMULAS } from './game/staticChargeFormulas.js';
 import { DC_TOPICS } from './game/dcTopics.js';
+import { MESH_TOPIC } from './game/meshTopic.js';
 import { FORMULAS_OHM, FORMULAS_CIRCUITS } from './game/dcFormulas.js';
 
 /** מספר להצגה: מספרים קטנים/גדולים מאוד בכתיב מדעי (4×10⁻⁴), אחרת כמו שהוא. */
@@ -202,6 +203,7 @@ export const TOPICS = {
     progression: 'בלי המרות → המרת נתון אחד → המרת תשובה → המרת כמה נתונים',
   }),
   power: DC_TOPICS.power,
+  mesh: MESH_TOPIC,
   ac: wrapCircuitTopic({
     id: 'ac',
     title: 'זרם חילופין',
@@ -229,7 +231,7 @@ export const ALL_TOPIC_IDS = Object.keys(TOPICS);
  * נתון עריך שנשמר לכל שכבה (topicIds) ומנוהל דרך פאנל הניהול.
  */
 export const DEFAULT_CURRICULA = {
-  'י': ['static-charge-v2', 'voltage-sources', 'electric-current', 'resistance', 'basic', 'kirchhoff', 'advanced', 'power', 'ac', 'boss'],
+  'י': ['static-charge-v2', 'voltage-sources', 'electric-current', 'resistance', 'basic', 'kirchhoff', 'advanced', 'power', 'mesh', 'ac', 'boss'],
   'יא': [], // אין עדיין אף topic בנוי לתוכן כיתה י"א (ראו syllabus.js - הכל "קר").
 };
 
