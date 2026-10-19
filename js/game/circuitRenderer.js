@@ -170,7 +170,19 @@ function renderNode(node, vMax, maxCurrent, out, energized) {
   });
 }
 
+// תצוגה לפי level.display (אופציונלי; בלעדיו הציור זהה למקור):
+//   values: false      -> מציגים רק את שם הרכיב (R1), בלי ערך - הערכים בשורות הנתונים של השלב
+//   leafText: {R1: 'I₁', R3: 'I₃ = ?'} -> טקסט מותאם לכל רכיב (מחליף את התווית)
+//   sourceText: 'E'     -> תווית המקור במקום "V=12V"
+// node.unitDisplay === 'k' מציג את הנגד בקילו-אוהם (R1=2.2kΩ) - לשלבי המרת יחידות.
+let DISPLAY = null;
+const trimNum = x => Number(Number(x).toPrecision(6));
+
 function fmtValue(node) {
+  const d = DISPLAY;
+  if (d && d.leafText && d.leafText[node.label] != null) return d.leafText[node.label];
+  if (d && d.values === false) return node.label;
+  if (node.kind === 'r' && node.unitDisplay === 'k') return `${node.label}=${trimNum(node.value / 1000)}kΩ`;
   if (node.kind === 'r') return `${node.label}=${node.value}Ω`;
   if (node.kind === 'c') return `${node.label}=${node.value * 1e6}µF`;
   return `${node.label}=${node.value}H`;
@@ -204,6 +216,11 @@ function sourceSymbol(x, topY, isAC) {
 
 export function renderCircuit(level, energized = false) {
   if (level.circuitKind === 'opamp') return renderOpamp(level);
+  DISPLAY = level.display || null;
+  try { return renderCircuitTree(level, energized); } finally { DISPLAY = null; }
+}
+
+function renderCircuitTree(level, energized) {
   resetPid();
   const root = level.root;
   measure(root);
@@ -240,7 +257,7 @@ export function renderCircuit(level, energized = false) {
     </defs>
     ${sourceSymbol(srcX, topY, level.isAC)}
     ${out.body.join('\n')}
-    ${labeledText(srcX, srcBottomY + 24, level.isAC ? `Veff=${level.source.voltage}V @${level.source.freqHz}Hz` : `V=${level.source.voltage}V`, 'comp-val')}
+    ${labeledText(srcX, srcBottomY + 24, DISPLAY && DISPLAY.sourceText != null ? DISPLAY.sourceText : (level.isAC ? `Veff=${level.source.voltage}V @${level.source.freqHz}Hz` : `V=${level.source.voltage}V`), 'comp-val')}
   </svg>`;
   return { svg, width: totalW, height: totalH };
 }

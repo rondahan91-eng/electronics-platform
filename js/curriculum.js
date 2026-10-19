@@ -35,6 +35,8 @@ import {
 } from './game/logicBasicsRenderer.js';
 import { fmtTime } from './ui.js';
 import { STATIC_CHARGE_FORMULAS } from './game/staticChargeFormulas.js';
+import { DC_TOPICS } from './game/dcTopics.js';
+import { FORMULAS_OHM, FORMULAS_CIRCUITS } from './game/dcFormulas.js';
 
 /** מספר להצגה: מספרים קטנים/גדולים מאוד בכתיב מדעי (4×10⁻⁴), אחרת כמו שהוא. */
 const SUP_DIGITS = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '-': '⁻' };
@@ -147,6 +149,7 @@ export const TOPICS = {
       return `✅ מדויק! זרם של ${q.answer}A - קצב זרימת המטען הנכון בדיוק (זמן: ${fmtTime(elapsedSeconds)}).`;
     },
   },
+  resistance: DC_TOPICS.resistance,
   'digital-numbers': {
     id: 'digital-numbers',
     title: 'שיטות ספירה',
@@ -184,7 +187,10 @@ export const TOPICS = {
     color: '#00e5ff',
     totalLevels: topicLevelCount('basic'),
     generateLevel: (localId) => generateTopicLevel('basic', localId),
+    formulas: FORMULAS_OHM,
+    progression: 'בלי המרות → המרת נתון אחד → המרת תשובה → המרת כמה נתונים',
   }),
+  kirchhoff: DC_TOPICS.kirchhoff,
   advanced: wrapCircuitTopic({
     id: 'advanced',
     title: 'התנגדות מתקדמת',
@@ -192,7 +198,10 @@ export const TOPICS = {
     color: '#7c4dff',
     totalLevels: topicLevelCount('advanced'),
     generateLevel: (localId) => generateTopicLevel('advanced', localId),
+    formulas: FORMULAS_CIRCUITS,
+    progression: 'בלי המרות → המרת נתון אחד → המרת תשובה → המרת כמה נתונים',
   }),
+  power: DC_TOPICS.power,
   ac: wrapCircuitTopic({
     id: 'ac',
     title: 'זרם חילופין',
@@ -220,7 +229,7 @@ export const ALL_TOPIC_IDS = Object.keys(TOPICS);
  * נתון עריך שנשמר לכל שכבה (topicIds) ומנוהל דרך פאנל הניהול.
  */
 export const DEFAULT_CURRICULA = {
-  'י': ['static-charge-v2', 'voltage-sources', 'electric-current', 'basic', 'advanced', 'ac', 'boss'],
+  'י': ['static-charge-v2', 'voltage-sources', 'electric-current', 'resistance', 'basic', 'kirchhoff', 'advanced', 'power', 'ac', 'boss'],
   'יא': [], // אין עדיין אף topic בנוי לתוכן כיתה י"א (ראו syllabus.js - הכל "קר").
 };
 
