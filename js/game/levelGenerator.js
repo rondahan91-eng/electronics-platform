@@ -54,9 +54,9 @@ function attachSafeMaxPower(root, rng) {
 
 const HINTS = {
   current: ['חוק אוהם: I = ⟦V⁄R⟧', 'בטור - הזרם זהה בכל הרכיבים. במקביל - הזרם מתחלק בין הענפים.'],
-  voltage: ['מפל מתח על רכיב: V = I × R', 'סכום מפלי המתח בעל טורי שווה למתח המקור (חוק קירכהוף למתח).'],
-  power: ['הספק: P = I² × R', 'אם ההספק המחושב חורג מההספק המרבי המותר - הנגד יישרף!'],
-  req: ['התנגדות שקולה בטור: Req = R1+R2+...', 'התנגדות שקולה במקביל: ⟦1⁄Req⟧ = ⟦1⁄R1⟧ + ⟦1⁄R2⟧ + ...'],
+  voltage: ['מפל מתח על רכיב: V = I · R', 'סכום מפלי המתח במעגל טורי שווה למתח המקור (חוק קירכהוף למתח).'],
+  power: ['הספק: P = I² · R', 'אם ההספק המחושב חורג מההספק המרבי המותר - הנגד יישרף!'],
+  req: ['התנגדות שקולה בטור: Rtot = R1+R2+...', 'התנגדות שקולה במקביל: ⟦1⁄Rtot⟧ = ⟦1⁄R1⟧ + ⟦1⁄R2⟧ + ...'],
   veff: ['במעגל AC משתמשים במתח האפקטיבי (Veff) בדיוק כמו במתח DC.', 'V = I × |Z|'],
   impedance: ['עכבת קבל: Xc = ⟦1⁄2πfC⟧', 'עכבה כוללת בטור: Z = R + jXc (משתמשים בגודל |Z|)'],
   gain: ['מגבר אינברטי: Vout = −⟦Rf⁄Rin⟧ × Vin', 'מגבר לא-אינברטי: Vout = (1 + ⟦Rf⁄Rin⟧) × Vin'],
@@ -70,7 +70,7 @@ function buildQuestion(level, root, ask, targetLeaf, rng) {
   const isAC = level.isAC;
   let value, unit, label, prompt;
   const t = targetLeaf || root;
-  const name = targetLeaf ? targetLeaf.label : (isAC ? 'העכבה הכוללת (Z)' : 'ההתנגדות השקולה (Req)');
+  const name = targetLeaf ? targetLeaf.label : (isAC ? 'העכבה הכוללת (Z)' : 'ההתנגדות השקולה (Rtot)');
 
   if (ask === 'current') {
     value = t.current.abs();
@@ -87,7 +87,7 @@ function buildQuestion(level, root, ask, targetLeaf, rng) {
   } else if (ask === 'req') {
     value = root._Z.abs();
     unit = isAC ? 'Ω (|Z|)' : 'Ω';
-    prompt = isAC ? 'מהי העכבה הכוללת (|Z|) של המעגל?' : 'מהי ההתנגדות השקולה (Req) של המעגל כולו?';
+    prompt = isAC ? 'מהי העכבה הכוללת (|Z|) של המעגל?' : 'מהי ההתנגדות השקולה (Rtot) של המעגל כולו?';
   }
   value = roundTo(value, 4);
   const hintKey = ask === 'req' && isAC ? 'impedance' : ask;
