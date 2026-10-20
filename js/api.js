@@ -297,10 +297,18 @@ export async function createNewStudent(username, password, displayName, grade) {
 export async function updateStudentPassword(studentId, newPassword) {
   return dispatch('updateStudentPassword', { studentId, newPassword });
 }
+// שמירות תוצאה שעוד באוויר. המסך לא מחכה להן (הלחצן "לשלב הבא" מופיע מיד אחרי תשובה נכונה, ראו handleSuccess), ולכן קריאת
+// התקדמות שמגיעה מיד אחריהן (חזרה לפרקים/למפה) מחכה שיסתיימו, אחרת היא הייתה מחזירה מצב ישן.
+const inflightSaves = new Set();
 export async function saveLevelResult(studentId, topicId, levelId, { solved, timeSeconds, disqualified }) {
-  return dispatch('saveLevelResult', { studentId, topicId, levelId, solved, timeSeconds, disqualified });
+  const p = dispatch('saveLevelResult', { studentId, topicId, levelId, solved, timeSeconds, disqualified });
+  const done = () => inflightSaves.delete(p);
+  inflightSaves.add(p);
+  p.then(done, done);
+  return p;
 }
 export async function fetchMyProgress(studentId) {
+  if (inflightSaves.size) await Promise.allSettled([...inflightSaves]);
   return dispatch('fetchMyProgress', { studentId });
 }
 export async function fetchGrades() {

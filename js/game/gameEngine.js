@@ -591,12 +591,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     state.progress.highestLevel = Math.max(state.progress.highestLevel || 0, level.id);
     updateStatsCard(level);
 
-    await recordAttempt(level, { solved: true, timeSeconds: elapsed, disqualified: false });
+    // השמירה לשרת (Apps Script, שניות בודדות) רצה ברקע: המסך והמפה עובדים מול state.progress המקומי שכבר עודכן, ולכן הלחצן
+    // "לשלב הבא" מופיע מיד ולא מחכה לתשובת השרת. recordAttempt תופס שגיאות בעצמו (הודעה), ו-api.js דואג שקריאת התקדמות
+    // (חזרה לפרקים) תחכה לשמירות שעוד באוויר, כך שהמפה לא תציג מצב ישן.
+    const saving = recordAttempt(level, { solved: true, timeSeconds: elapsed, disqualified: false });
 
-    // אם המשתמש/ת כבר ניווטו הלאה (למשל "חזרה למפה") בזמן שהשמירה
-    // האסינכרונית לעיל עוד רצה - המסך הזה כבר לא קיים ב-DOM, אין מה להשלים.
     const row = document.getElementById('game-next-row');
-    if (!row) return;
+    if (!row) return saving;
     const hasNext = state.levelId < windowEnd;
     const finishLabel = preview ? 'סיימת את הנושא! חזרה לפאנל הניהול 🏁' : 'סיימת את התת-נושא! חזרה לפרקים 🏁';
     row.innerHTML = `<button id="next-level" class="ground">${hasNext ? 'לשלב הבא →' : finishLabel}</button><button id="retry-level" class="secondary">לנסות שוב</button>`;
@@ -610,5 +611,6 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     });
     document.getElementById('retry-level').addEventListener('click', () => openLevel(level.id));
     document.getElementById('next-level').focus({ preventScroll: false }); // הפוקוס עובר ל"לשלב הבא" (המקלדת/קורא מסך)
+    return saving;
   }
 }
