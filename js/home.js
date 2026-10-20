@@ -3,13 +3,18 @@
 // הרשמית (syllabus.js). המורה חושף פרקים; רק פרקים חשופים מוצגים כאן -
 // לא עוד "רשימת נושאים שטוחה" עם unlockedCount.
 // ==========================================================================
-import { SYLLABUS, chapterKey, chapterHasPractice } from './syllabus.js';
+import { SYLLABUS, chapterKey, chapterHasPractice, allChapters } from './syllabus.js';
 import { TOPICS } from './curriculum.js';
 import { mountTopic } from './game/gameEngine.js';
 import { fetchMyProgress, fetchGrades } from './api.js';
 import { CONFIG } from './config.js';
 import { shellHtml, wireShell, toast, escapeHtml } from './ui.js';
 import { playClick } from './game/audio.js';
+
+// נושאי התרגול שמחוברים בפועל לסילבוס. נושא שרשום ב-TOPICS אבל מנותק (שלבי הבוס, שמורים בצד) לא נספר בנקודות
+function attachedTopicIds() {
+  return [...new Set(allChapters().flatMap(c => (c.item.subs || []).filter(sb => sb.topicId).map(sb => sb.topicId)))];
+}
 
 export async function mountHome(app, session, onLogout) {
   let progress = {};
@@ -164,7 +169,7 @@ export async function mountHome(app, session, onLogout) {
           chapterN: d.chapterN, chapterTitle: d.chapterTitle, n: d.subN, title: d.subTitle, color: d.color,
         };
         mountTopic(app, session, topic, () => mountHome(app, session, onLogout), onLogout,
-          { subtopic, knownTopicIds: Object.keys(TOPICS) });
+          { subtopic, knownTopicIds: attachedTopicIds() });
       });
     });
   }

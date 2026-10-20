@@ -14,6 +14,9 @@
 //                    topic.evaluateLine(level, key, value) -> {outcome:'correct'|'incorrect', message}. השלב נפתר רק כשכל השורות אושרו.
 //   topic.hintsOnCircuit = true - הרמזים נבנים על גבי הציור: topic.render(level, energized, {hints: n}) מצייר את n הרמזים (הטקסט
 //                    של question.hints מוצג גם בכרטיס הרמזים).
+//   topic.mountPanel(container, level, api) -> dispose - פאנל תשובה מותאם לגמרי (בנושא שבו הפתרון הוא אינטראקציה מורכבת, למשל
+//                    צדיקים ונוכלים): במקום שאלה/שדה תשובה/רמזים הסטנדרטיים. api = { solved(), wrongAttempt(), preview }.
+//                    solved() מריץ את זרימת ההצלחה הרגילה (הודעה, איור energized, שמירה, "לשלב הבא"); wrongAttempt() רושם ניסיון שגוי.
 //   topic.theoryDeck = {src, title} - מצגת בחלון צף (deckPopup.js): קופצת אוטומטית פעם אחת, בתשובה השגויה הראשונה של
 //                    התלמיד/ה בנושא, ולחצן "המצגת" פותח אותה שוב בשקף שבו עצרו.
 //
@@ -52,7 +55,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   const deck = topic.theoryDeck
     ? createDeckViewer({
       src: topic.theoryDeck.src, title: topic.theoryDeck.title, persist: !preview,
-      storageKey: `electro.deck.${session.studentId || session.username || 'anon'}.${topic.id}`,
+      storageKey: `electro.deck.${session.studentId || session.username || 'anon'}.${topic.id}${topic.theoryDeck.version ? '.v' + topic.theoryDeck.version : ''}`,
     })
     : null;
   const deckBtn = (cls = 'secondary') => (deck ? `<button type="button" class="${cls} deck-open-btn" data-deck-open>📖 המצגת</button>` : '');
@@ -211,7 +214,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     // שלב עם כמה תשובות (question.lines): שורת בדיקה לכל גודל, בלי שדה יחיד ובלי סרגל כתיב
     // opt-in של הנושא (topic.evaluateLine) ושורות שהן אובייקטים: בנושא הלוגיקה question.lines הוא מערך מחרוזות (שורות תצוגה של המשפט)
     const lines = (typeof topic.evaluateLine === 'function' && Array.isArray(q.lines) && q.lines.length && typeof q.lines[0] === 'object') ? q.lines : null;
-    const useTools = !lines && q.inputMode !== 'text' && topic.answerTools !== false;
+    const custom = typeof topic.mountPanel === 'function'; // פאנל תשובה מותאם (opt-in של הנושא)
+    const useTools = !lines && !custom && q.inputMode !== 'text' && topic.answerTools !== false;
     const localLevel = toLocal(state.levelId);
     const breadcrumbText = sub.chapterN ? `פרק ${sub.chapterN} · ${sub.chapterTitle} · ${sub.n}` : (topic.subtitle || '');
     const breadcrumb = mathHtml(breadcrumbText);
@@ -270,8 +274,8 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
         </div>
 
         <div class="game-grid">
-          <div class="qa-panel glass">
-            <div class="qa-question">${mathHtml(q.prompt)}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
+          <div class="qa-panel glass${custom ? ' qa-panel-custom' : ''}">
+            ${custom ? '<div class="custom-panel" id="custom-panel"></div>' : `<div class="qa-question">${mathHtml(q.prompt)}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
             ${lines ? linesHtml : `<div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>
@@ -289,7 +293,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
             <div class="hints-card" id="hints-card" style="display:none;">
               <div class="hints-card-label">רמזים · <span id="hints-count">0</span>/${(q.hints || []).length}</div>
               <div id="hint-list"></div>
-            </div>
+            </div>`}
             <div class="qa-feedback" id="qa-feedback" role="status" aria-live="polite"></div>
             <div class="hero-figure" id="hero-figure"></div>
             <div class="game-next-row" id="game-next-row"></div>
@@ -305,10 +309,16 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       { stats: shellStats() });
 
     wireShell(onLogout, onBack, { session, screen: `מסך תרגול · ${mathPlain(breadcrumbText)} · שלב ${localLevel}` });
+    if (custom) {
+      // פאנל מותאם הוא רחב (טבלאות): הריבוע הצף היה מכסה את העמודה השמאלית שלהן, ולכן הוא יושב בזרימה מתחת לכותרת
+      const fs = document.getElementById('floating-stats'), intro = app.querySelector('.game-intro');
+      if (fs && intro) { fs.classList.add('fs-inline'); intro.after(fs); }
+    }
     attachFormulaSheet(app, topic, formulaState);
     wireDeckButtons();
     document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
-    document.getElementById('hint-btn').addEventListener('click', () => showHint(level, 'panel'));
+    const panelHint = document.getElementById('hint-btn');
+    if (panelHint) panelHint.addEventListener('click', () => showHint(level, 'panel'));
     const arenaHint = document.getElementById('arena-hint-btn');
     if (arenaHint) arenaHint.addEventListener('click', () => showHint(level, 'arena'));
     const introToggle = document.getElementById('intro-toggle');
@@ -318,7 +328,16 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       introToggle.setAttribute('aria-expanded', String(!descEl.hidden));
       introToggle.classList.toggle('open', !descEl.hidden);
     });
-    if (lines) {
+    if (custom) {
+      answerTools = null;
+      const api = {
+        preview,
+        solved: () => { if (!state.solvedLock) handleSuccess(level); },
+        wrongAttempt: () => registerWrongAttempt(level),
+      };
+      const dispose = topic.mountPanel(document.getElementById('custom-panel'), level, api);
+      cleanupLevel = () => { try { if (typeof dispose === 'function') dispose(); } catch (e) { console.warn('mountPanel dispose', e); } };
+    } else if (lines) {
       answerTools = null;
       lines.forEach(l => {
         const lineInput = document.getElementById(`line-input-${l.key}`);
@@ -360,6 +379,19 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     if (dqEl) { dqEl.textContent = lv.disqualifications || 0; dqEl.classList.toggle('danger', !!(lv.disqualifications)); }
     if (dqTopEl) dqTopEl.textContent = lv.disqualifications || 0;
     if (elapsedEl) elapsedEl.textContent = fmtTime(Math.round((performance.now() - state.startTs) / 1000));
+  }
+
+  // ניסיון שגוי בפאנל מותאם: אותה הנהלת חשבונות כמו בתשובה שגויה בשדה רגיל (ספירה, שמירה, מצגת עזר אם יש)
+  function registerWrongAttempt(level) {
+    playError();
+    if (!preview) {
+      const lv = state.progress.levels[level.id] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
+      lv.attempts = (lv.attempts || 0) + 1;
+      state.progress.levels[level.id] = lv;
+    }
+    updateStatsCard(level);
+    recordAttempt(level, { solved: false, timeSeconds: null, disqualified: false });
+    maybeAutoDeck();
   }
 
   function showHint(level, source) {

@@ -1,6 +1,6 @@
 // ==========================================================================
 // deckPopup.js - חלון צף גדול שמציג מצגת (קובץ HTML באותו origin, בתוך iframe) ומזכיר באיזה שקף התלמיד/ה עצרו.
-// המצגת היא "deck-stage" (assets/dc-circuits-deck.html): תומכת ב-#N (שקף N, מונה מ-1) בכתובת, מפרסמת את
+// המצגת היא "deck-stage" (למשל assets/mesh-currents-deck.html): תומכת ב-#N (שקף N, מונה מ-1) בכתובת, מפרסמת את
 // האינדקס הנוכחי כ-deck-stage.index, ו-goTo(i)/next()/prev(). לכן הכול נעשה בלי לשנות את קובץ המצגת.
 //   createDeckViewer({ src, title, storageKey, persist }) -> { open({ auto }), close(), lastSlide(), autoShown(), markAutoShown(), isOpen() }
 // storageKey: מפתח localStorage פר-תלמיד/ה ופר-נושא; נשמרים בו השקף האחרון (0-based) והאם החלון כבר קפץ אוטומטית.

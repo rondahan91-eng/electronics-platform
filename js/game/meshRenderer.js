@@ -4,7 +4,7 @@
 //   ענף שמאלי: R1 למעלה ו-E1 מתחתיו.   ענף אמצעי: R2 (משותף).   ענף ימני: R3 למעלה ו-E2 מתחתיו.
 // שני זרמי הלולאה בכיוון השעון (שמאל: עולה בענף השמאלי, יורד ב-R2. ימין: עולה ב-R2, יורד בענף הימני).
 // בציור רק שמות (R₁, E₁...) - הערכים בטבלה שליד הזירה. 5 רמזים מצטברים (opts.hints) נכתבים על גבי המעגל:
-//   1 חיצי הלולאות I₁ ו-I₂    2 משוואת לולאה 1 (סימנים)    3 משוואת לולאה 2    4 אותן משוואות עם ערכים    5 שורת "חיסול I₂".
+//   1 חיצי הלולאות I₁ ו-I₂    2 משוואת לולאה 1 (סימנים)    3 משוואת לולאה 2    4 אותן משוואות עם ערכים    5 משוואה בנעלם אחד (כמו במצגת: מבודדים I₁, מציבים, מקבלים D·I₂ = N).
 // energized=true (אחרי פתרון נכון): נקודות זרימה בכיוון הזרם האמיתי (לפי הסימן של I1, I2, IR2) -
 // כך רואים שזרם לולאה שלילי זורם בפועל נגד כיוון השעון, ושבענף המשותף הזרם הוא ההפרש.
 // הפונקציה טהורה ודטרמיניסטית: הזירה מרונדרת מחדש מאפס בכל שינוי (innerHTML).
@@ -212,8 +212,8 @@ function stepBanner(step) {
   const y = B + 36, h = 62;
   return `<g class="mesh-banner">
     <rect x="30" y="${y}" width="840" height="${h}" rx="18" fill="${PLATE}" fill-opacity="0.86" stroke="var(--px-brand-bright)" stroke-opacity="0.65" stroke-width="2"/>
-    <text x="760" y="${y + 38}" text-anchor="middle" direction="rtl" class="mesh-he" fill="${SOFT}" font-size="25" font-weight="700">חיסול I₂:</text>
-    <text x="400" y="${y + 41}" text-anchor="middle" direction="ltr" class="mesh-eq" fill="${WIRE}" font-size="34" font-weight="800">${esc(step)}</text>
+    <text x="690" y="${y + 38}" text-anchor="middle" direction="rtl" class="mesh-he" fill="${SOFT}" font-size="25" font-weight="700">משוואה בנעלם אחד:</text>
+    <text x="330" y="${y + 41}" text-anchor="middle" direction="ltr" class="mesh-eq" fill="${WIRE}" font-size="34" font-weight="800">${esc(step)}</text>
   </g>`;
 }
 
@@ -265,7 +265,7 @@ function describe(m, hints, energized) {
   if (hints >= 2 && o.symbolic) p.push(`רמז 2: משוואת הלולאה השמאלית: ${o.symbolic[0]}.`);
   if (hints >= 3 && o.symbolic) p.push(`רמז 3: משוואת הלולאה הימנית: ${o.symbolic[1]}.`);
   if (hints >= 4 && o.numeric) p.push(`רמז 4: המשוואות עם הערכים: ${o.numeric[0]}, ${o.numeric[1]}.`);
-  if (hints >= 5 && o.step) p.push(`רמז 5: שורת חיסול I₂: ${o.step}.`);
+  if (hints >= 5 && o.step) p.push(`רמז 5: משוואה בנעלם אחד: ${o.step}.`);
   if (energized) {
     const I1 = Number(m.I1), I2 = Number(m.I2), IR2 = m.IR2 != null ? Number(m.IR2) : I1 - I2;
     const dir = x => (x > 0 ? 'בכיוון השעון' : 'נגד כיוון השעון');

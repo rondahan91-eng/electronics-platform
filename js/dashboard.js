@@ -22,7 +22,7 @@ const TABS = [
 ];
 
 // פרקים בני-תרגול בלבד, כל אחד קשור ל-topicId שממנו נשלף המעקב הכיתתי. לפרק עם כמה תת-נושאים של אותו topic
-// (זרם חשמלי) יש ערך אחד. פרק שיש בו כמה topics שונים (פרק 9: זרמי חוגים ושלבי בוס) מקבל ערך נפרד לכל topic,
+// (זרם חשמלי) יש ערך אחד. פרק שיש בו כמה topics שונים (קרה בפרק 9 כשהיו בו זרמי חוגים ושלבי בוס) מקבל ערך נפרד לכל topic,
 // עם התת-נושאים שלו (subs) - כך המעקב והעיון בכל אחד מהם נשארים נגישים.
 function practicableChapters() {
   const out = [];
@@ -267,7 +267,7 @@ export async function mountDashboard(app, session, onLogout) {
         }).join('');
         const subs = it.subs || [];
         const practiceLevels = subs.reduce((a, sb) => a + (sb.total || 0), 0);
-        const meta = (it.h ? `${it.h} שעות` : 'ניסוי מעבדה') + ` · ${subs.length} תת-נושאים` + (practiceLevels ? ` · ${practiceLevels} שלבי תרגול` : ' · אין עדיין תרגול');
+        const meta = (it.h ? `${it.h} שעות` : (it.extra ? 'תרגול נוסף (לא פרק רשמי)' : 'ניסוי מעבדה')) + ` · ${subs.length} תת-נושאים` + (practiceLevels ? ` · ${practiceLevels} שלבי תרגול` : ' · אין עדיין תרגול');
         const expanded = state.curriculumExpanded.has(key);
         const subsHtml = subs.length ? subs.map(sb => `
           <div class="reveal-sub-row">

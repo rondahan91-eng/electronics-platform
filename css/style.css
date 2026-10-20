@@ -521,6 +521,9 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .floating-stats-item b { font: 700 12.5px var(--font-mono); color: var(--px-ink); }
 .floating-stats-item b.danger { color: var(--px-coral-ink); }
 @media (max-width: 780px) { .floating-stats { left: 10px; top: 150px; padding: 9px 11px; } .floating-stats-item { font-size: 10.5px; } }
+/* פאנל תשובה מותאם (topic.mountPanel): הריבוע בזרימה, שורה אחת מעל האיור, כדי שלא יכסה טבלאות רחבות */
+.floating-stats.fs-inline { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 18px; width: fit-content; margin: 0 0 12px; padding: 7px 14px; }
+.floating-stats.fs-inline .floating-stats-item { gap: 6px; }
 
 /* ---------- לחצני כתיב לשדה התשובה (js/game/answerInput.js) ----------
    שורת לחצנים מתחת לשדה: ×, ÷, שבר, חזקה, ×10ⁿ, כתיב עילי/תחתי, מינוס, סוגריים. */

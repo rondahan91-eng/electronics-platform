@@ -37,6 +37,7 @@ import { fmtTime } from './ui.js';
 import { STATIC_CHARGE_FORMULAS } from './game/staticChargeFormulas.js';
 import { DC_TOPICS } from './game/dcTopics.js';
 import { MESH_TOPIC } from './game/meshTopic.js';
+import { KNIGHTS_TOPIC } from './game/knightsTopic.js';
 import { FORMULAS_OHM, FORMULAS_CIRCUITS } from './game/dcFormulas.js';
 
 /** מספר להצגה: מספרים קטנים/גדולים מאוד בכתיב מדעי (4×10⁻⁴), אחרת כמו שהוא. */
@@ -165,6 +166,7 @@ export const TOPICS = {
     animateIncorrect: animateDigitalNumbersIncorrect,
     answerTools: false, // מספרים שלמים קטנים: אין צורך בכתיב מדעי/שברים
   },
+  knights: KNIGHTS_TOPIC,
   'logic-basics': {
     id: 'logic-basics',
     title: 'מושגי יסוד בלוגיקה',
@@ -212,6 +214,8 @@ export const TOPICS = {
     totalLevels: topicLevelCount('ac'),
     generateLevel: (localId) => generateTopicLevel('ac', localId),
   }),
+  // שלבי הבוס מנותקים מהסילבוס (פרק 9 מציג תרגול רק בזרמי חוגים, כדי שתלמידים לא יגיעו לתרגילים שלא למדו),
+  // אבל הנושא נשמר כאן כתוכן שמור: לחבר מחדש = practice('boss', 1) ב-syllabus.js
   boss: wrapCircuitTopic({
     id: 'boss',
     title: 'שלבי בוס - רמת בגרות',

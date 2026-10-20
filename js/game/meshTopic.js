@@ -38,6 +38,7 @@ export const MESH_TOPIC = {
   hintsOnCircuit: true,
   flatStage: true, // המעגל רחב: הקשת העליונה של הזירה הרגילה חותכת את פינותיו
   answerTools: false,
-  theoryDeck: { src: 'assets/dc-circuits-deck.html', title: 'מצגת: עקרונות מעגלי זרם ישר' },
+  // version: מפתח האחסון (השקף האחרון, והאם הקפיצה האוטומטית כבר הייתה) מתאפס כשמחליפים מצגת
+  theoryDeck: { src: 'assets/mesh-currents-deck.html', title: 'מצגת: שיטת זרמי החוגים', version: 2 },
   progression: 'שני זרמי הלולאה → גם הזרם בענף המשותף (משלב 4) → מקורות הפוכים',
 };
