@@ -15,8 +15,8 @@
 //   topic.hintsOnCircuit = true - הרמזים נבנים על גבי הציור: topic.render(level, energized, {hints: n}) מצייר את n הרמזים (הטקסט
 //                    של question.hints מוצג גם בכרטיס הרמזים).
 //   topic.mountPanel(container, level, api) -> dispose - פאנל תשובה מותאם לגמרי (בנושא שבו הפתרון הוא אינטראקציה מורכבת, למשל
-//                    צדיקים ונוכלים): במקום שאלה/שדה תשובה/רמזים הסטנדרטיים. api = { solved(), wrongAttempt(), preview }.
-//                    solved() מריץ את זרימת ההצלחה הרגילה (הודעה, איור energized, שמירה, "לשלב הבא"); wrongAttempt() רושם ניסיון שגוי.
+//                    צדיקים ונוכלים): במקום שאלה/שדה תשובה/רמזים הסטנדרטיים. api = { solved(), wrongAttempt({soft}), preview }.
+//                    solved() מריץ את זרימת ההצלחה הרגילה (הודעה, איור energized, שמירה, "לשלב הבא"); wrongAttempt() רושם ניסיון שגוי (wrongAttempt({ soft: true }): רק צליל, בלי ספירה ובלי שמירה לשרת - לשגיאות חקירה כמו גרירה לעמודה לא נכונה).
 //   topic.theoryDeck = {src, title} - מצגת בחלון צף (deckPopup.js): קופצת אוטומטית פעם אחת, בתשובה השגויה הראשונה של
 //                    התלמיד/ה בנושא, ולחצן "המצגת" פותח אותה שוב בשקף שבו עצרו.
 //
@@ -66,6 +66,9 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   const leaveGuard = () => {
     if (autoDeckTimer) { clearTimeout(autoDeckTimer); autoDeckTimer = null; }
     if (deck) deck.close();
+    // גם יציאה דרך הסרגל/התנתקות פורקת פאנל מותאם (מאזינים על window). פעם אחת בלבד: אחרי הפירוק הניקוי מתאפס
+    const done = cleanupLevel; cleanupLevel = () => {};
+    try { done(); } catch (err) { console.warn('cleanupLevel', err); }
   };
   let hadAttemptsAtMount = false; // תלמיד/ה שכבר ניסו בנושא (גם במכשיר אחר): המצגת כבר לא קופצת, ויש את הלחצן
   const maybeAutoDeck = () => {
@@ -316,7 +319,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     }
     attachFormulaSheet(app, topic, formulaState);
     wireDeckButtons();
-    document.getElementById('back-map').addEventListener('click', () => { cleanupLevel(); renderMap(); });
+    document.getElementById('back-map').addEventListener('click', () => { leaveGuard(); renderMap(); });
     const panelHint = document.getElementById('hint-btn');
     if (panelHint) panelHint.addEventListener('click', () => showHint(level, 'panel'));
     const arenaHint = document.getElementById('arena-hint-btn');
@@ -333,7 +336,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       const api = {
         preview,
         solved: () => { if (!state.solvedLock) handleSuccess(level); },
-        wrongAttempt: () => registerWrongAttempt(level),
+        wrongAttempt: (o) => registerWrongAttempt(level, o),
       };
       const dispose = topic.mountPanel(document.getElementById('custom-panel'), level, api);
       cleanupLevel = () => { try { if (typeof dispose === 'function') dispose(); } catch (e) { console.warn('mountPanel dispose', e); } };
@@ -382,8 +385,9 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   }
 
   // ניסיון שגוי בפאנל מותאם: אותה הנהלת חשבונות כמו בתשובה שגויה בשדה רגיל (ספירה, שמירה, מצגת עזר אם יש)
-  function registerWrongAttempt(level) {
+  function registerWrongAttempt(level, o) {
     playError();
+    if (o && o.soft) return;
     if (!preview) {
       const lv = state.progress.levels[level.id] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
       lv.attempts = (lv.attempts || 0) + 1;
@@ -530,9 +534,9 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   }
 
   async function recordAttempt(level, payload) {
-    if (preview) return; // תצוגה מקדימה למורה - לא נשמר במעקב הכיתתי
-    try { await saveLevelResult(session.studentId, topic.id, level.id, payload); }
-    catch (e) { toast('שגיאה בשמירת נתונים: ' + e.message, true); }
+    if (preview) return true; // תצוגה מקדימה למורה - לא נשמר במעקב הכיתתי
+    try { await saveLevelResult(session.studentId, topic.id, level.id, payload); return true; }
+    catch (e) { toast('שגיאה בשמירת נתונים: ' + e.message, true); return false; }
   }
 
   async function handleDisqualify(level, result) {
@@ -575,7 +579,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
     if (portalEl) portalEl.classList.add('solved');
 
     const heroEl = document.getElementById('hero-figure');
-    if (heroEl) {
+    if (heroEl && typeof topic.mountPanel !== 'function') {
       const heroText = typeof topic.formatAnswer === 'function'
         ? topic.formatAnswer(level)
         : `${level.question.answer}${level.question.unit}`;
@@ -598,6 +602,13 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
 
     const row = document.getElementById('game-next-row');
     if (!row) return saving;
+    // הלחצן מופיע מיד, ולכן שמירה שנכשלה לא יכולה להישאר רק כהודעה קצרה: מציגים אזהרה שנשארת על המסך
+    saving.then(ok => {
+      const r = document.getElementById('game-next-row');
+      if (ok === false && r && !document.getElementById('save-warn')) {
+        r.insertAdjacentHTML('beforebegin', '<p id="save-warn" class="save-warn" role="alert">⚠ ההתקדמות בשלב הזה לא נשמרה בשרת (בעיית חיבור). אפשר להמשיך, אבל כדאי לבדוק את החיבור לאינטרנט, ואם השלב לא מסומן כפתור במפה, לפתור אותו שוב.</p>');
+      }
+    });
     const hasNext = state.levelId < windowEnd;
     const finishLabel = preview ? 'סיימת את הנושא! חזרה לפאנל הניהול 🏁' : 'סיימת את התת-נושא! חזרה לפרקים 🏁';
     row.innerHTML = `<button id="next-level" class="ground">${hasNext ? 'לשלב הבא →' : finishLabel}</button><button id="retry-level" class="secondary">לנסות שוב</button>`;
@@ -610,7 +621,7 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
       if (hasNext) openLevel(level.id + 1); else onBack();
     });
     document.getElementById('retry-level').addEventListener('click', () => openLevel(level.id));
-    document.getElementById('next-level').focus({ preventScroll: false }); // הפוקוס עובר ל"לשלב הבא" (המקלדת/קורא מסך)
+    document.getElementById('next-level').focus({ preventScroll: typeof topic.mountPanel === 'function' }); // הפוקוס עובר ל"לשלב הבא" (המקלדת/קורא מסך)
     return saving;
   }
 }

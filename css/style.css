@@ -501,6 +501,10 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .game-next-row { margin-top: 18px; display: flex; gap: 9px; flex-wrap: wrap; }
 .game-next-row button.ground { background: var(--px-ground); color: var(--px-ink-inverse); box-shadow: none; }
 .game-next-row button.ground:hover { background: var(--px-ground-raised); }
+.save-warn { margin: 14px 0 0; padding: 10px 14px; border-radius: 12px; background: #fff4d6; border: 1px solid #e3ad54; color: #6b4a00; font-size: 13.5px; line-height: 1.6; }
+button.secondary:focus-visible, .nav-item:focus-visible, .map-back:focus-visible, .intro-toggle:focus-visible { outline: 3px solid var(--px-brand-deep); outline-offset: 2px; } /* box-shadow:none של הכפתורים האלה מבטל את הטבעת הכללית */
+@media (max-width: 480px) { .intro-toggle, .map-back { min-height: 40px; } }
+.game-next-row button.ground:focus-visible { outline: 3px solid var(--px-brand-deep); outline-offset: 3px; } /* box-shadow:none למעלה מבטל את טבעת המיקוד הכללית */
 
 .hints-card { background: var(--px-amber-soft); border: 1px solid #eccf9e; border-radius: 20px; padding: 18px; margin-top: 16px; }
 .hints-card-label { font: 600 10.5px/1 var(--font-main); color: var(--px-amber-ink); letter-spacing: .14em; margin-bottom: 11px; }

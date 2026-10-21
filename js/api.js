@@ -307,8 +307,18 @@ export async function saveLevelResult(studentId, topicId, levelId, { solved, tim
   p.then(done, done);
   return p;
 }
+const SAVE_WAIT_MS = 6000; // שמירה תקועה לא תקפיא את מסך הבית: אחרי הזמן הזה קוראים התקדמות בכל זאת
 export async function fetchMyProgress(studentId) {
-  if (inflightSaves.size) await Promise.allSettled([...inflightSaves]);
+  if (inflightSaves.size) {
+    const pending = [...inflightSaves];
+    let timer;
+    const timedOut = await Promise.race([
+      Promise.allSettled(pending).then(() => false),
+      new Promise(r => { timer = setTimeout(() => r(true), SAVE_WAIT_MS); }),
+    ]);
+    clearTimeout(timer);
+    if (timedOut) pending.forEach(p => inflightSaves.delete(p)); // תקועה: לא תעכב גם את הקריאות הבאות
+  }
   return dispatch('fetchMyProgress', { studentId });
 }
 export async function fetchGrades() {

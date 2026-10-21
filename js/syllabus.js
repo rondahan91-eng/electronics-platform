@@ -302,5 +302,5 @@ export function chapterHasPractice(item) {
 
 /** מפתחות כל הפרקים שיש להם תרגול אמיתי כרגע - ברירת מחדל סבירה ל"חשוף". */
 export const DEFAULT_REVEALED = allChapters()
-  .filter(c => chapterHasPractice(c.item))
+  .filter(c => chapterHasPractice(c.item) && !c.item.extra) // תרגול נוסף (extra) נחשף רק ביד המורה
   .map(c => c.key);

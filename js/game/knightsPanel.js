@@ -5,6 +5,7 @@
 // כל ההיגיון (שורות, בדיקת פסוק, חלקים, קביעות, עקביות) מגיע מ-knightsLogic.js; כאן רק ממשק.
 // חוזה מול המנוע (gameEngine.js, topic.mountPanel): mountKnightsPanel(container, level, api) -> dispose.
 //   api.wrongAttempt() בכל בדיקה כושלת של ממש (לא על קלט חסר/לא שלם), api.solved() פעם אחת בסיום שלב 4.
+//   גרירה/בחירה של חלק לעמודה לא נכונה היא טעות חקירה: api.wrongAttempt({ soft: true }) (צליל בלבד, בלי ספירה ובלי שמירה לשרת).
 // הסגנון מוזרק פעם אחת (#knights-panel-style), כל המחלקות בקידומת kn-.
 // ==========================================================================
 import {
@@ -50,7 +51,7 @@ const CSS = `
   --kn-am-bg:#fdf1dc;--kn-am-bd:#e3ad54;--kn-am-fg:#7a4c05;--kn-am-strong:#f2a93b;
   --kn-sky-bg:#e4f3fc;--kn-sky-bd:#a6d3ee;--kn-sky-fg:#17597f;
   --kn-hint-bg:#e9eef4;--kn-hint-bd:#bccadb;--kn-hint-fg:#33465b;
-  --kn-warn:#5b3fb0;--kn-warn-bg:#f1ecfe;--kn-warn-line:#cdbff2;
+  --kn-warn:#5b3fb0;--kn-warn-bg:#f1ecfe;--kn-warn-line:#cdbff2;--kn-ctl-line:#7f93b3;
   display:grid;gap:14px;min-width:0;font-size:14.5px;line-height:1.7;color:var(--px-ink,#0e1c17);text-align:start}
 .kn-panel *{box-sizing:border-box}
 .kn-panel :focus-visible{outline:3px solid var(--kn-navy);outline-offset:2px;box-shadow:none}
@@ -70,16 +71,16 @@ const CSS = `
 .kn-stages{display:grid;gap:12px}
 .kn-stage{background:#fff;border:1px solid var(--px-hairline-strong,#c9d2cd);border-radius:20px;overflow:hidden;min-width:0;scroll-margin-top:72px}
 .kn-stage.is-active{border-color:var(--kn-navy);box-shadow:0 0 0 1px var(--kn-navy)}
-.kn-stage.is-locked{background:var(--px-paper-sunken,#f1f0eb);opacity:.8}
+.kn-stage.is-locked{background:var(--px-paper-sunken,#f1f0eb)}
 .kn-stage.is-done{border-color:var(--kn-am-bd)}
 .kn-stage-top{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--kn-navy-soft)}
 .kn-stage.is-done .kn-stage-top{background:var(--kn-am-bg)}
 .kn-stage.is-locked .kn-stage-top{background:transparent}
 .kn-num{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--kn-navy);color:#fff;font:700 14px/1 var(--font-main)}
 .kn-stage.is-done .kn-num{background:var(--kn-am-strong);color:#3d2700}
-.kn-stage.is-locked .kn-num{background:#7d8ba0}
+.kn-stage.is-locked .kn-num{background:#5f6f86}
 .kn-stage-title{margin:0;flex:1 1 auto;min-width:0;font:700 15px/1.4 var(--font-main);color:var(--kn-navy)}
-.kn-stage.is-locked .kn-stage-title{color:#4d5b6e}
+.kn-stage.is-locked .kn-stage-title,.kn-stage.is-locked .kn-stage-status{color:#3f4c5e}
 .kn-stage-status{flex:none;font-size:12px;color:#4d5b6e}
 .kn-stage.is-done .kn-stage-status{color:var(--kn-am-fg);font-weight:700}
 .kn-panel button.kn-toggle{padding:5px 14px;font-size:13px;box-shadow:none;transform:none}
@@ -108,7 +109,7 @@ const CSS = `
 .kn-sent.is-bad .kn-sent-mark{color:var(--kn-warn)}
 .kn-menu{display:flex;flex-wrap:wrap;gap:8px 16px}
 .kn-menu-group{display:flex;flex-wrap:wrap;gap:6px}
-.kn-panel button.kn-sym{min-width:48px;min-height:48px;padding:6px 12px;border-radius:12px;background:#fff;color:var(--kn-navy);border:2px solid var(--kn-navy-line);box-shadow:none;transform:none;
+.kn-panel button.kn-sym{min-width:48px;min-height:48px;padding:6px 12px;border-radius:12px;background:#fff;color:var(--kn-navy);border:2px solid var(--kn-ctl-line);box-shadow:none;transform:none;
   display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:700 14px/1.2 var(--font-main)}
 .kn-panel button.kn-sym:hover:not(:disabled){background:var(--kn-navy-soft);border-color:var(--kn-navy);transform:none}
 .kn-panel button.kn-sym:active:not(:disabled){background:#d6e1f1}
@@ -119,12 +120,12 @@ const CSS = `
 
 /* שלב 2: חלקים ועמודות */
 .kn-s2{display:grid;gap:12px;min-width:0}
-.kn-tray{display:grid;gap:8px;padding:10px;border:2px dashed var(--kn-navy-line);border-radius:14px;min-height:64px;background:#fafcff;align-content:center}
+.kn-tray{display:grid;gap:8px;padding:10px;border:2px dashed var(--kn-ctl-line);border-radius:14px;min-height:64px;background:#fafcff;align-content:center}
 .kn-tray-title{font-weight:700;color:var(--kn-navy);font-size:13px}
 .kn-tray-group{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
 .kn-tray-who{font-weight:700;color:var(--kn-navy);font-size:13px;min-width:2.2em}
 .kn-tray-empty{color:var(--kn-am-fg);font-weight:700}
-.kn-chip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;min-width:60px;padding:6px 14px;border:2px solid var(--kn-navy-line);border-radius:12px;background:#fff;
+.kn-chip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;min-width:60px;padding:6px 14px;border:2px solid var(--kn-ctl-line);border-radius:12px;background:#fff;
   cursor:grab;user-select:none;-webkit-user-select:none;touch-action:manipulation;color:var(--kn-navy)}
 .kn-chip.kn-whole{border-color:var(--kn-navy);background:var(--kn-navy-soft)}
 .kn-chip:hover{border-color:var(--kn-navy)}
@@ -149,6 +150,7 @@ const CSS = `
 .kn-cols.is-armed button.kn-drop{cursor:pointer;background:var(--kn-navy-soft);outline:2px dashed var(--kn-navy);outline-offset:-5px}
 .kn-cols.is-armed button.kn-drop:hover{background:#d6e1f1}
 .kn-cols.is-armed button.kn-drop:focus-visible{outline:3px solid var(--kn-navy);outline-offset:-3px}
+.kn-panel button.kn-drop:disabled{opacity:1;cursor:default;background:#fff}
 .kn-drop-ph{color:var(--px-ink-muted,#5b6f67)}
 .kn-cols.is-armed .kn-drop-ph{color:var(--kn-navy);font-weight:700}
 .kn-placed{display:inline-flex;flex-direction:column;align-items:center;padding:4px 12px;border:2px solid var(--kn-am-bd);border-radius:10px;background:var(--kn-am-bg);color:var(--kn-am-fg)}
@@ -171,7 +173,7 @@ const CSS = `
 .kn-val{font-weight:700;min-width:46px}
 .kn-val.is-t{background:var(--kn-t-bg);color:var(--kn-t-fg)}
 .kn-val.is-f{background:var(--kn-f-bg);color:var(--kn-f-fg)}
-.kn-panel button.kn-cell,.kn-panel button.kn-mark{min-width:62px;min-height:40px;padding:4px 8px;border-radius:10px;border:2px dashed var(--kn-navy-line);background:#fff;color:var(--px-ink-soft,#41564e);
+.kn-panel button.kn-cell,.kn-panel button.kn-mark{min-width:62px;min-height:40px;padding:4px 8px;border-radius:10px;border:2px dashed var(--kn-ctl-line);background:#fff;color:var(--px-ink-soft,#41564e);
   font:700 13px/1.2 var(--font-main);box-shadow:none;transform:none;cursor:pointer}
 .kn-panel button.kn-mark{min-width:52px;font-size:17px}
 .kn-panel button.kn-cell:hover:not(:disabled),.kn-panel button.kn-mark:hover:not(:disabled){background:var(--kn-navy-soft);border-color:var(--kn-navy);transform:none}
@@ -192,7 +194,7 @@ const CSS = `
 .kn-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .kn-panel button.kn-check{padding:10px 24px;font-size:15px}
 .kn-panel button.kn-hint-btn{padding:9px 18px;font-size:14px}
-.kn-panel button.kn-hint-btn[aria-disabled="true"]{opacity:.5;cursor:not-allowed;box-shadow:none;transform:none}
+.kn-panel button.kn-hint-btn[aria-disabled="true"]{opacity:.7;cursor:not-allowed;box-shadow:none;transform:none}
 .kn-hint-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .kn-hint-count{font-size:13px;font-weight:600;color:var(--kn-hint-fg)}
 .kn-fb{display:none;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.65}
@@ -216,6 +218,18 @@ const CSS = `
 @media (max-width:600px){
   .qa-panel.qa-panel-custom{padding:12px 10px;margin-inline:-12px;border-radius:20px}
 }
+.kn-eq{display:block;direction:ltr;text-align:left;margin:3px 0;padding:2px 0;overflow-x:auto;white-space:nowrap}
+.kn-panel button.kn-hint-btn,.kn-panel button.kn-toggle{border-color:var(--kn-ctl-line)}
+@media (max-width:640px){
+  .kn-tablewrap{padding:0;margin-inline:-6px;max-width:none}
+  .kn-table th,.kn-table td{padding:3px 2px;font-size:11.5px}
+  .kn-t4 thead th{white-space:normal;line-height:1.25;padding:3px 1px;font-size:10px}
+  .kn-t4 .kn-th-sub{font-size:9px}
+  .kn-val{min-width:20px}
+  .kn-panel button.kn-toggle{min-height:40px}
+  .kn-panel button.kn-cell{min-width:40px;min-height:40px;padding:3px 2px;font-size:12px;border-width:2px}
+  .kn-panel button.kn-mark{min-width:40px;min-height:40px;padding:3px 2px}
+}
 @media (max-width:480px){
   .kn-stage-top{padding:10px 12px}
   .kn-stage-status{display:none}
@@ -223,14 +237,8 @@ const CSS = `
   .kn-scenario{padding:12px 14px}
   .kn-formula{font-size:21px;padding:6px 10px}
   .kn-body{padding:12px 8px}
-  .kn-tablewrap{padding:2px}
-  .kn-table th,.kn-table td{padding:3px 3px;font-size:12px}
   .kn-th-sub{font-size:10px}
   .kn-th-formula{display:none}
-  .kn-t4 thead th{white-space:normal;line-height:1.25}
-  .kn-val{min-width:32px}
-  .kn-panel button.kn-cell{min-width:44px;min-height:38px;padding:3px 2px;font-size:12px;border-width:2px}
-  .kn-panel button.kn-mark{min-width:40px;min-height:38px;padding:3px 2px}
   .kn-cols{grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
   .kn-panel button.kn-sym{min-width:44px}
 }
@@ -259,6 +267,8 @@ export function mountKnightsPanel(container, level, api) {
   const sName = i => { const p = personOf(ex, ex.sentences[i].speaker); return p ? p.name : ''; };
   const sLabel = i => `S${nS > 1 ? ex.sentences[i].speaker : ''}`;
   const hintList = k => (ex.hints && (ex.hints[String(k)] || ex.hints[k])) || [];
+  const titleOf = k => (ex.stageTitles && ex.stageTitles[String(k)]) || TITLES[k - 1];
+  const ruleHtml = t => String(t).split(/(\{[^}]*\})/).map(part => (/^\{[^}]*\}$/.test(part) ? ltr(part.slice(1, -1)) : esc(part))).join(''); // {x = S} = נוסחה משמאל לימין
 
   const S = {
     status: [null, 'active', 'locked', 'locked', 'locked'],
@@ -297,7 +307,7 @@ export function mountKnightsPanel(container, level, api) {
     return `<section class="kn-stage is-locked" data-stage="${k}" aria-labelledby="${uid}-h${k}">
       <div class="kn-stage-top">
         <span class="kn-num" aria-hidden="true">${k}</span>
-        <h3 class="kn-stage-title" id="${uid}-h${k}" tabindex="-1">שלב ${k} מתוך 4 · ${TITLES[k - 1]}</h3>
+        <h3 class="kn-stage-title" id="${uid}-h${k}" tabindex="-1">שלב ${k} מתוך 4 · ${titleOf(k)}</h3>
         <span class="kn-stage-status"></span>
         <button type="button" class="secondary kn-toggle" data-act="toggle" data-stage="${k}" aria-expanded="false" hidden>הצגה</button>
       </div>
@@ -316,16 +326,17 @@ export function mountKnightsPanel(container, level, api) {
   function announce(text) { const el = q('[data-sr]'); if (el) { srFlip = !srFlip; el.textContent = text + (srFlip ? '\u200b' : ''); } }
 
   /** הודעות: lines = [{ k: 'ok'|'bad'|'note', html }]. kind של הקופסה לפי החמורה ביותר. */
-  function showFb(k, lines) {
+  function showFb(k, lines, quiet) {
     const fb = q(`[data-fb="${k}"]`);
     if (!fb) return;
     if (!lines.length) { fb.className = 'kn-fb'; fb.innerHTML = ''; return; }
     const kind = lines.some(l => l.k === 'bad') ? 'bad' : lines.every(l => l.k === 'ok') ? 'ok' : 'note';
     fb.className = `kn-fb show is-${kind}`;
-    fb.innerHTML = lines.map(l => `<div class="kn-fb-line"><span class="kn-fb-ic" aria-hidden="true">${l.k === 'ok' ? '✓' : l.k === 'bad' ? '!' : 'i'}</span><span>${l.html}</span></div>`).join('');
-    if (fb.scrollIntoView) fb.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    fb.innerHTML = lines.map(l => `<div class="kn-fb-line"><span class="kn-fb-ic" aria-hidden="true">${l.k === 'ok' ? '✓' : l.k === 'bad' ? '!' : 'ℹ'}</span><span>${l.html}</span></div>`).join('');
+    if (!quiet && fb.scrollIntoView) fb.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
   }
   const wrong = () => { try { api.wrongAttempt(); } catch (e) { console.warn('knights wrongAttempt', e); } };
+  const soft = () => { try { api.wrongAttempt({ soft: true }); } catch (e) { console.warn('knights wrongAttempt', e); } };
 
   // ---- רמזים
   function hintBlock(k) {
@@ -361,7 +372,13 @@ export function mountKnightsPanel(container, level, api) {
 
   // ---- מחזור החיים של השלבים
   function summaryHtml(k) {
-    if (k === 1) return `הפסוק נבנה: ${ex.sentences.map((s, i) => `${nS > 1 ? `${esc(sName(i))}: ` : ''}${ltr(tokensText(S.sent[i].tokens))}`).join(' · ')}`;
+    if (k === 1) {
+      return `${nS > 1 ? 'הפסוקים נבנו' : 'הפסוק נבנה'}: ${ex.sentences.map((s, i) => {
+        const built = tokensText(S.sent[i].tokens), canon = sentenceText(s);
+        // ∧ ו-∨ אינם תלויי סדר, ולכן הסדר ההפוך מתקבל; בשלבים הבאים מוצג הפסוק בסדר שבמסמך
+        return `${nS > 1 ? `${esc(sName(i))}: ` : ''}${ltr(built)}${built !== canon ? ` (שקול ל־${ltr(canon)}, וכך הוא מופיע בשלבים הבאים)` : ''}`;
+      }).join(' · ')}`;
+    }
     if (k === 2) return `כל ${CHIPS.length} החלקים שובצו בעמודות המתאימות.`;
     if (k === 3) return `הקביעות נרשמו בכל ${R.length} השורות.`;
     return `שורה ${solution.n} היא השורה העקבית היחידה.`;
@@ -382,7 +399,7 @@ export function mountKnightsPanel(container, level, api) {
     tog.hidden = !(st === 'done' && k < 4);
     tog.setAttribute('aria-expanded', String(!!S.open[k]));
     tog.textContent = S.open[k] ? 'הסתרה' : 'הצגה';
-    tog.setAttribute('aria-label', `${S.open[k] ? 'הסתרת' : 'הצגת'} שלב ${k}: ${TITLES[k - 1]}`);
+    tog.setAttribute('aria-label', `${S.open[k] ? 'הסתרת' : 'הצגת'} שלב ${k}: ${titleOf(k)}`);
   }
   function activate(k) {
     S.status[k] = 'active';
@@ -402,9 +419,10 @@ export function mountKnightsPanel(container, level, api) {
     S.status[k] = 'done';
     S.open[k] = (k === 4);
     refreshStage(k);
+    if (k === 2) renderS2(); // העמודות הופכות ללא פעילות אחרי שהשלב הושלם
     if (k < 4) {
       activate(k + 1);
-      announce(`שלב ${k} הושלם. שלב ${k + 1} נפתח: ${TITLES[k]}.`);
+      announce(`שלב ${k} הושלם. שלב ${k + 1} נפתח: ${titleOf(k + 1)}.`);
       const next = stageEl(k + 1);
       later(() => {
         const h = q(`#${uid}-h${k + 1}`);
@@ -456,11 +474,21 @@ export function mountKnightsPanel(container, level, api) {
     q(`[data-mark="${i}"]`, blk).textContent = st.ok ? '✓' : st.bad ? '!' : '';
     qa('.kn-sym', blk).forEach(b => { b.disabled = st.ok; });
   }
+  // עריכת משפט אחד מנקה את ההודעה שלו, אבל ההודעה על משפט אחר שעדיין שגוי נשארת
+  function refreshS1Fb() {
+    const lines = S.sent.filter(st => st.bad && !st.ok && st.msg).map(st => ({ k: 'bad', html: st.msg }));
+    showFb(1, lines, true);
+  }
   function addToken(i, tok) {
     const st = S.sent[i];
     if (st.ok) return;
-    if (st.tokens.length >= MAX_TOKENS) { announce('הפסוק ארוך מדי. מחקו סמל לפני שמוסיפים עוד.'); return; }
+    if (st.tokens.length >= MAX_TOKENS) {
+      announce('הפסוק ארוך מדי. מחקו סמל לפני שמוסיפים עוד.');
+      showFb(1, [{ k: 'note', html: `${nS > 1 ? `${esc(sName(i))}: ` : ''}הפסוק ארוך מדי. מחקו סמל לפני שמוסיפים עוד.` }]);
+      return;
+    }
     st.tokens.push(tok); st.bad = false;
+    refreshS1Fb();
     renderSent(i);
   }
   function check1() {
@@ -471,14 +499,16 @@ export function mountKnightsPanel(container, level, api) {
       const who = nS > 1 ? `המשפט של ${esc(sName(i))}: ` : '';
       if (st.ok) { lines.push({ k: 'ok', html: `${who}הפסוק נכון.` }); return; }
       const r = checkFormula(ex, i, st.tokens);
-      if (r.ok) { st.ok = true; st.bad = false; lines.push({ k: 'ok', html: `${who}הפסוק נכון.` }); return; }
+      if (r.ok) { st.ok = true; st.bad = false; st.msg = ''; lines.push({ k: 'ok', html: `${who}הפסוק נכון.` }); return; }
       allOk = false; st.bad = true;
       let msg;
       if (r.reason === 'empty') { msg = 'עוד לא נבנה פסוק.'; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
-      else if (r.reason === 'syntax') { msg = `הפסוק לא שלם. פסוק כאן בנוי משני חלקים (משתנה, ואפשר גם ${ltr('¬')} לפניו) עם קשר אחד ביניהם.`; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
+      else if (r.reason === 'incomplete') { msg = `הפסוק לא שלם. פסוק כאן בנוי משני חלקים (משתנה, ואפשר גם ${ltr('¬')} לפניו) עם קשר אחד ביניהם.`; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
+      else if (r.reason === 'malformed') { msg = `בפסוק יש סמל במקום לא נכון או יותר מדי סמלים. פסוק כאן בנוי משני חלקים (משתנה, ואפשר גם ${ltr('¬')} לפניו) עם קשר אחד ביניהם.`; failed = true; }
       else if (r.reason === 'op') { msg = 'החלקים נכונים, אבל הקשר ביניהם לא. שימו לב למילת הקישור במשפט: "וגם" או "או".'; failed = true; }
-      else { msg = `אחד החלקים לא מתאים. בדקו את השלילות (${ltr('¬')}) ואת המשתנה שבכל חלק.`; failed = true; }
-      lines.push({ k: 'bad', html: who + msg });
+      else { msg = `אחד החלקים (או שניהם) לא מתאים. בדקו את השלילות (${ltr('¬')}) ואת המשתנה שבכל חלק.`; failed = true; }
+      st.msg = who + msg;
+      lines.push({ k: 'bad', html: st.msg });
     });
     ex.sentences.forEach((_, i) => renderSent(i));
     if (allOk) { showFb(1, [{ k: 'ok', html: nS > 1 ? 'כל הפסוקים נכונים.' : 'הפסוק נכון.' }]); completeStage(1); return; }
@@ -489,7 +519,7 @@ export function mountKnightsPanel(container, level, api) {
 
   // ================================================================ שלב 2
   function body2() {
-    return `<p class="kn-lead">פרקו את הפסוק לחלקיו ושבצו כל חלק בעמודת הטבלה שהוא מתאר (עמודת זהות של דובר, עמודת עובדה חיצונית כמו נורית), לא בעמודת התוצאה, שמחושבת ולא מוזנת. את הפסוק השלם משבצים בעמודת הקביעה.</p>
+    return `<p class="kn-lead">פרקו את הפסוק לחלקיו ושבצו כל חלק בעמודה שהוא מתאר: עמודת זהות של דובר${ex.facts.length ? ', או עמודת עובדה חיצונית כמו נורית' : ''}. חלק לא משבצים בעמודת הקביעה, כי היא מחושבת ולא מוזנת. את הפסוק השלם משבצים בעמודת הקביעה${nS > 1 ? ' של אותו דובר' : ''}.</p>
       <p class="kn-lead">גררו חלק לעמודה, או בחרו חלק (לחיצה, או Enter / רווח במקלדת) ואז בחרו עמודה. חלק ששובץ לא נכון חוזר למקומו.</p>
       <div class="kn-s2">
         <div class="kn-tray" data-tray role="group" aria-label="חלקים לשיבוץ"></div>
@@ -514,11 +544,12 @@ export function mountKnightsPanel(container, level, api) {
     const here = CHIPS.filter(c => S.placed[c.id] === col.id);
     const isVar = col.kind === 'var';
     const sub = isVar ? `${personOf(ex, col.v) ? 'זהות' : 'עובדה'} · ${ltr(col.v)}` : 'תוצאה מחושבת';
-    const label = `עמודת ${col.name}${here.length ? `. שובצו בה: ${here.map(c => iso(c.text)).join(', ')}` : ''}. ${S.selected ? 'לחצו כדי לשבץ כאן את החלק הנבחר' : 'בחרו קודם חלק לשיבוץ'}`;
+    const done = S.status[2] === 'done';
+    const label = `עמודת ${col.name}${here.length ? `. שובצו בה: ${here.map(c => iso(c.text)).join(', ')}` : ''}${done ? '' : `. ${S.selected ? 'לחצו כדי לשבץ כאן את החלק הנבחר' : 'בחרו קודם חלק לשיבוץ'}`}`;
     return `<div class="kn-col ${isVar ? 'kn-col-var' : 'kn-col-det'}" data-col="${col.id}">
       <div class="kn-col-head"><span class="kn-col-name">${esc(col.name)}</span><span class="kn-col-sub">${sub}</span></div>
-      <button type="button" class="kn-drop" data-act="drop" data-col="${col.id}" data-fk="col-${col.id}" aria-label="${esc(label)}">
-        ${here.map(placedHtml).join('')}${here.length ? '' : `<span class="kn-drop-ph">${S.selected ? 'לחצו כאן לשיבוץ' : 'גררו לכאן'}</span>`}
+      <button type="button" class="kn-drop" data-act="drop" data-col="${col.id}" data-fk="col-${col.id}" aria-label="${esc(label)}"${done ? ' disabled' : ''}>
+        ${here.map(placedHtml).join('')}${here.length ? '' : `<span class="kn-drop-ph">${done ? 'ריקה: אין חלק לעמודה הזו' : S.selected ? 'לחצו כאן לשיבוץ' : 'גררו לכאן'}</span>`}
       </button></div>`;
   }
   function renderS2(focusKey) {
@@ -544,7 +575,7 @@ export function mountKnightsPanel(container, level, api) {
     announce(S.selected ? `נבחר ${c.text}. בחרו עמודה לשיבוץ.` : 'הבחירה בוטלה.');
   }
   function dropReason(chip, col) {
-    if (chip.kind === 'part') return col.kind === 'det' ? 'חלק מתאר זהות או עובדה, לא תוצאה.' : 'החלק מדבר על משהו אחר. בדקו על מי או על מה הוא מדבר.';
+    if (chip.kind === 'part') return col.kind === 'det' ? 'חלק מתאר זהות או עובדה, ולא את עמודת הקביעה.' : 'החלק מדבר על משהו אחר. בדקו על מי או על מה הוא מדבר.';
     return col.kind === 'var' ? 'הפסוק השלם הוא התוצאה, ולכן הוא שייך לעמודת הקביעה.' : 'זה הפסוק של דובר אחר.';
   }
   function tryPlace(chipId, colId) {
@@ -554,8 +585,8 @@ export function mountKnightsPanel(container, level, api) {
       S.placed[chipId] = colId;
       S.selected = null;
       const left = CHIPS.filter(c => !S.placed[c.id]);
-      showFb(2, left.length ? [{ k: 'ok', html: `${ltr(chip.text)} שובץ נכון בעמודה ${esc(col.name)}.` }] : []);
-      announce(`${chip.text} שובץ נכון בעמודה ${col.name}.`);
+      showFb(2, left.length ? [{ k: 'ok', html: `${ltr(chip.text)} שובץ נכון בעמודת ${esc(col.name)}.` }] : []);
+      announce(`${chip.text} שובץ נכון בעמודת ${col.name}.`);
       if (!left.length) {
         renderS2();
         completeStage(2);
@@ -575,7 +606,7 @@ export function mountKnightsPanel(container, level, api) {
     const msg = `${ltr(chip.text)} חזר למקומו. ${dropReason(chip, col)}`;
     showFb(2, [{ k: 'bad', html: msg }]);
     announce(msg.replace(/<[^>]+>/g, ''));
-    wrong();
+    soft();
   }
 
   // ================================================================ שלבים 3 ו-4: טבלאות
@@ -586,14 +617,18 @@ export function mountKnightsPanel(container, level, api) {
   const cellState = v => (v === null ? 'ריק' : tv(v));
 
   function body3() {
-    const method = `בכל שורה מניחים ערך ${heList(ex.vars.map(v => `ל־${ltr(v)}`))}, ומחשבים ${heList(ex.sentences.map((s, i) => ltr(`${sLabel(i)} = ${sentenceText(s)}`)), 'ו־')} לפי ההנחה.`;
+    const assume = heList(ex.vars.map(v => `ל־${ltr(v)}`));
+    const eqs = heList(ex.sentences.map((s, i) => ltr(`${sLabel(i)} = ${sentenceText(s)}`)), 'ו־');
+    const method = nS > 1
+      ? `בכל שורה מניחים ערך ${assume} (${nV} משתנים = ${R.length} שורות), ומחשבים את שתי הקביעות: ${eqs}.`
+      : `בכל שורה מניחים ערך ${assume}, ומחשבים ${eqs} לפי ההנחה.`;
     const head = `<thead>
       <tr><th rowspan="2" scope="col">שורה</th><th colspan="${nV}" scope="colgroup">מניחים</th><th colspan="${nS}" scope="colgroup">מחשבים</th></tr>
       <tr>${ex.vars.map(varHead).join('')}${ex.sentences.map((s, i) => `<th scope="col">${esc(s.col)}<span class="kn-th-sub kn-th-formula">${esc(`${sLabel(i)} = ${sentenceText(s)}`)}</span></th>`).join('')}</tr>
     </thead>`;
     const bodyRows = R.map(r => `<tr data-row="${r.n}"><th scope="row">${r.n}</th>${ex.vars.map(v => valCell(r.vals[v])).join('')}${ex.sentences.map((s, i) =>
       `<td><button type="button" class="kn-cell" data-act="det" data-row="${r.n}" data-i="${i}"></button></td>`).join('')}</tr>`).join('');
-    return `<p class="kn-lead">לכל שורה בטבלה (כל שילוב אפשרי של אמת ושקר במשתנים) קבעו את ערך הפסוק שבניתם בשלב 1, ורשמו אותו בעמודת ${nS > 1 ? 'הקביעה של כל דובר' : 'הקביעה'}. לחיצה על תא מחליפה בין ריק, אמת ושקר.</p>
+    return `<p class="kn-lead">לכל שורה בטבלה (כל שילוב אפשרי של אמת ושקר במשתנים) ${nS > 1 ? 'קבעו את ערכי הפסוקים שבניתם בשלב 1, ורשמו אותם בעמודות הקביעה של הדוברים' : 'קבעו את ערך הפסוק שבניתם בשלב 1, ורשמו אותו בעמודת הקביעה'}. לחיצה על תא מחליפה בין ריק, אמת ושקר.</p>
       <p class="kn-method"><b>השיטה:</b> ${method}</p>
       ${wrapTable('טבלת הקביעות', head + `<tbody>${bodyRows}</tbody>`)}
       <div class="kn-actions"><button type="button" class="kn-check" data-act="check3">בדיקה</button>${hintBlock(3)}</div>
@@ -616,6 +651,7 @@ export function mountKnightsPanel(container, level, api) {
     const cur = S.dets[n][i];
     S.dets[n][i] = cur === null ? true : cur === true ? false : null;
     delete S.detBad[key]; delete S.detNeed[key];
+    showFb(3, [], true);
     refreshDetCell(btn);
     announce(`שורה ${n}, ${ex.sentences[i].col}: ${cellState(S.dets[n][i])}`);
   }
@@ -633,7 +669,7 @@ export function mountKnightsPanel(container, level, api) {
     refreshAllDet();
     if (!bad.length) { showFb(3, [{ k: 'ok', html: 'כל הקביעות נכונות.' }]); completeStage(3); return; }
     const lines = [];
-    if (badRows.size) lines.push({ k: 'bad', html: `בשורות המסומנות (${[...badRows].join(', ')}) יש ערך שגוי. חשבו שוב את ${nS > 1 ? 'הפסוקים' : 'הפסוק'} לפי הערכים שהונחו באותה שורה.` });
+    if (badRows.size) lines.push({ k: 'bad', html: `${badRows.size === 1 ? 'בשורה המסומנת' : 'בשורות המסומנות'} (${[...badRows].join(', ')}) יש ערך שגוי. חשבו שוב את ${nS > 1 ? 'הפסוקים' : 'הפסוק'} לפי הערכים שהונחו באותה שורה.` });
     if (empties) lines.push({ k: badRows.size ? 'bad' : 'note', html: 'יש למלא את כל השורות.' });
     showFb(3, lines);
     announce(lines.map(l => l.html.replace(/<[^>]+>/g, '')).join(' '));
@@ -647,8 +683,9 @@ export function mountKnightsPanel(container, level, api) {
     </thead>`;
     const bodyRows = T.map(r => `<tr data-row="${r.n}"><th scope="row">${r.n}</th>${ex.vars.map(v => valCell(r.vals[v])).join('')}${ex.sentences.map((_, i) => valCell(r.said[i]) + valCell(r.S[i])).join('')}
       <td class="kn-markcell"><button type="button" class="kn-mark" data-act="mark" data-row="${r.n}"></button></td></tr>`).join('');
-    return `<p class="kn-lead">בדקו כל שורה בנפרד: השורה עקבית (✓) כשהערך שב"אמור (זהות)" שווה לערך שב"בפועל" (הקביעה), ${nS > 1 ? 'בשני הדוברים בו־זמנית' : 'ואחרת היא נפסלת (✗)'}. לחיצה על התא מחליפה בין ריק, ✓ ו־✗.</p>
-      <p class="kn-rule"><b>חוק העקביות:</b> דובר אמין חייב לומר אמת, דובר נוכל חייב לומר שקר${nS > 1 ? '; בתרגיל עם שני דוברים שני התנאים צריכים להתקיים יחד' : ''}.</p>
+    return `<p class="kn-lead">בדקו כל שורה בנפרד: השורה עקבית (✓) כשהערך שב"אמור (זהות)" שווה לערך שב"בפועל" (הקביעה), ${nS > 1 ? 'בשני הדוברים בו־זמנית, ואחרת היא נפסלת (✗)' : 'ואחרת היא נפסלת (✗)'}. לחיצה על התא מחליפה בין ריק, ✓ ו־✗.</p>
+      <p class="kn-rule"><b>חוק העקביות:</b> דובר אמין חייב לומר אמת, דובר נוכל חייב לומר שקר.</p>
+      ${ex.rule ? `<p class="kn-rule"><b>כלל הבדיקה:</b> ${ruleHtml(ex.rule)}</p>` : ''}
       ${wrapTable('טבלת בדיקת העקביות', head + `<tbody>${bodyRows}</tbody>`, 'kn-t4')}
       <div class="kn-actions"><button type="button" class="kn-check" data-act="check4">בדיקה</button>${hintBlock(4)}</div>
       <div class="kn-fb" data-fb="4" role="status" aria-live="polite"></div>
@@ -674,6 +711,7 @@ export function mountKnightsPanel(container, level, api) {
     const cur = S.marks[n];
     S.marks[n] = cur === null ? true : cur === true ? false : null;
     delete S.markBad[n]; delete S.markNeed[n];
+    showFb(4, [], true);
     refreshMark(btn);
     announce(`שורה ${n}: ${markWord(S.marks[n])}`);
   }
@@ -691,7 +729,7 @@ export function mountKnightsPanel(container, level, api) {
     if (!bad.length) { finish(); return; }
     refreshAllMarks();
     const lines = [];
-    if (badRows.length) lines.push({ k: 'bad', html: `בשורות המסומנות (${badRows.join(', ')}) הבדיקה שגויה. השוו בין "אמור" ל"בפועל" ${nS > 1 ? 'אצל כל אחד מהדוברים' : 'באותה שורה'}.` });
+    if (badRows.length) lines.push({ k: 'bad', html: `${badRows.length === 1 ? 'בשורה המסומנת' : 'בשורות המסומנות'} (${badRows.join(', ')}) הבדיקה שגויה. השוו בין "אמור" ל"בפועל" ${nS > 1 ? 'אצל כל אחד מהדוברים' : 'באותה שורה'}.` });
     if (empties) lines.push({ k: badRows.length ? 'bad' : 'note', html: 'יש לסמן ✓ או ✗ בכל שורה.' });
     showFb(4, lines);
     announce(lines.map(l => l.html.replace(/<[^>]+>/g, '')).join(' '));
@@ -708,7 +746,45 @@ export function mountKnightsPanel(container, level, api) {
     if (slot) slot.innerHTML = `<div class="kn-conclusion"><div class="kn-box-label">מסקנה</div><p>${ex.conclusion}</p></div>`;
     completeStage(4);
     announce(`שורה ${solution.n} היא העקבית היחידה. ${String(ex.conclusion).replace(/<[^>]+>/g, '').replace(/[\u2066-\u2069]/g, '')}`);
-    api.solved();
+    pendingSolve = true;
+    revealIllustration();
+  }
+  // האיור בראש העמוד מגלה את התשובה באנימציה של כשתי שניות, ובסיום שלב 4 הוא מחוץ למסך. לכן גוללים אליו, מפעילים את ההצלחה
+  // (שמצייר את הגילוי), ואחרי האנימציה חוזרים ללחצן "לשלב הבא", אלא אם התלמיד/ה כבר גללו בעצמם. בלי תנועה (prefers-reduced-motion)
+  // ההצלחה מופעלת מיד והדף נגלל ללחצן בלי אנימציה. api.solved() מובטח גם אם יוצאים מהשלב באמצע (dispose מפעיל אותו).
+  let pendingSolve = false, revealCleanup = null;
+  function fireSolved() {
+    if (!pendingSolve) return;
+    pendingSolve = false;
+    try { api.solved(); } catch (e) { console.warn('knights solved', e); }
+  }
+  function scrollToNext(smooth) {
+    const row = document.getElementById('game-next-row');
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
+  }
+  function revealIllustration() {
+    const arena = document.getElementById('arena-portal');
+    if (!arena || !arena.scrollIntoView || reducedMotion()) { fireSolved(); scrollToNext(false); return; }
+    let interrupted = false;
+    const stop = () => { interrupted = true; };
+    const evs = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+    evs.forEach(ev => window.addEventListener(ev, stop, { passive: true }));
+    // מעבר ליישום אחר בטלפון או סגירת הלשונית בתוך חצי השנייה: שולחים את ההצלחה מיד ולא מחכים לטיימר
+    const flush = () => { if (document.visibilityState === 'hidden') fireSolved(); };
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', fireSolved);
+    revealCleanup = () => {
+      evs.forEach(ev => window.removeEventListener(ev, stop));
+      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', fireSolved);
+      revealCleanup = null;
+    };
+    arena.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    later(fireSolved, 550);
+    later(() => {
+      if (revealCleanup) revealCleanup();
+      if (!interrupted) scrollToNext(true);
+    }, 550 + 2700);
   }
 
   // ================================================================ אירועים (האצלה על המכל)
@@ -719,11 +795,11 @@ export function mountKnightsPanel(container, level, api) {
     if (!el || !container.contains(el)) return;
     const act = el.dataset.act;
     if (act === 'tok') addToken(+el.dataset.i, el.dataset.tok);
-    else if (act === 'back') { const st = S.sent[+el.dataset.i]; if (!st.ok) { st.tokens.pop(); st.bad = false; renderSent(+el.dataset.i); } }
-    else if (act === 'clear') { const st = S.sent[+el.dataset.i]; if (!st.ok) { st.tokens = []; st.bad = false; renderSent(+el.dataset.i); } }
+    else if (act === 'back') { const st = S.sent[+el.dataset.i]; if (!st.ok) { st.tokens.pop(); st.bad = false; refreshS1Fb(); renderSent(+el.dataset.i); } }
+    else if (act === 'clear') { const st = S.sent[+el.dataset.i]; if (!st.ok) { st.tokens = []; st.bad = false; refreshS1Fb(); renderSent(+el.dataset.i); } }
     else if (act === 'check1') check1();
     else if (act === 'drop') {
-      if (!S.selected) { showFb(2, [{ k: 'note', html: 'בחרו קודם חלק לשיבוץ: לחיצה על החלק, או Enter כשהוא בפוקוס. אפשר גם לגרור.' }]); announce('בחרו קודם חלק לשיבוץ.'); }
+      if (!S.selected) { showFb(2, [{ k: 'note', html: 'בחרו קודם חלק לשיבוץ: לחצו עליו (או גררו אותו) ואז לחצו על העמודה.' }]); announce('בחרו קודם חלק לשיבוץ.'); }
       else tryPlace(S.selected, el.dataset.col);
     }
     else if (act === 'det') cycleDet(el);
@@ -741,6 +817,7 @@ export function mountKnightsPanel(container, level, api) {
     const chip = e.target.closest && e.target.closest('.kn-chip[data-chip]');
     if (chip && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) { e.preventDefault(); selectChip(chip.dataset.chip, true); return; }
     if (e.key === 'Escape' && S.selected) {
+      e.preventDefault(); // הבחירה בוטלה כאן: Escape לא ייסגור גם את דף הנוסחאות
       const prev = S.selected;
       S.selected = null;
       renderS2(`chip-${prev}`);
@@ -757,6 +834,11 @@ export function mountKnightsPanel(container, level, api) {
   };
   const clearOver = () => qa('.kn-col.is-over').forEach(c => c.classList.remove('is-over'));
   const onDragEnd = () => { qa('.kn-chip.is-dragging').forEach(c => c.classList.remove('is-dragging')); clearOver(); S.dragging = null; };
+  const onDragEnter = e => {
+    if (!S.dragging) return;
+    const col = e.target.closest && e.target.closest('.kn-col');
+    if (col) e.preventDefault();
+  };
   const onDragOver = e => {
     const col = e.target.closest && e.target.closest('.kn-col');
     if (!col || !S.dragging) return;
@@ -783,6 +865,7 @@ export function mountKnightsPanel(container, level, api) {
   container.addEventListener('keydown', onKeydown);
   container.addEventListener('dragstart', onDragStart);
   container.addEventListener('dragend', onDragEnd);
+  container.addEventListener('dragenter', onDragEnter);
   container.addEventListener('dragover', onDragOver);
   container.addEventListener('dragleave', onDragLeave);
   container.addEventListener('drop', onDrop);
@@ -792,11 +875,14 @@ export function mountKnightsPanel(container, level, api) {
   activate(1);
 
   return function dispose() {
+    fireSolved(); // סיימו את התרגיל ויצאו לפני שההצלחה הופעלה: עדיין נרשם כפתור
+    if (revealCleanup) revealCleanup();
     window.removeEventListener('resize', updateScrollHints);
     container.removeEventListener('click', onClick);
     container.removeEventListener('keydown', onKeydown);
     container.removeEventListener('dragstart', onDragStart);
     container.removeEventListener('dragend', onDragEnd);
+    container.removeEventListener('dragenter', onDragEnter);
     container.removeEventListener('dragover', onDragOver);
     container.removeEventListener('dragleave', onDragLeave);
     container.removeEventListener('drop', onDrop);

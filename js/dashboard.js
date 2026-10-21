@@ -252,8 +252,12 @@ export async function mountDashboard(app, session, onLogout) {
       const gradeState = state.grades.find(g => g.grade === grade);
       const revealedSet = new Set(gradeState ? gradeState.revealed : []);
       const keys = sec.items.map(it => chapterKey(sec.key, it.n));
-      const shown = keys.filter(k => revealedSet.has(k)).length;
-      totalChapters += keys.length;
+      // "תרגול נוסף" (extra) אינו פרק רשמי: המניינים סופרים רק פרקים רשמיים (הכפתורים עדיין חושפים/מסתירים גם אותו)
+      const officialKeys = sec.items.filter(it => !it.extra).map(it => chapterKey(sec.key, it.n));
+      const extraKeys = keys.filter(k => !officialKeys.includes(k));
+      const shown = officialKeys.filter(k => revealedSet.has(k)).length;
+      const extraShown = extraKeys.filter(k => revealedSet.has(k)).length;
+      totalChapters += officialKeys.length;
       totalRevealed += shown;
 
       const rowsHtml = sec.items.map(it => {
@@ -267,7 +271,7 @@ export async function mountDashboard(app, session, onLogout) {
         }).join('');
         const subs = it.subs || [];
         const practiceLevels = subs.reduce((a, sb) => a + (sb.total || 0), 0);
-        const meta = (it.h ? `${it.h} שעות` : (it.extra ? 'תרגול נוסף (לא פרק רשמי)' : 'ניסוי מעבדה')) + ` · ${subs.length} תת-נושאים` + (practiceLevels ? ` · ${practiceLevels} שלבי תרגול` : ' · אין עדיין תרגול');
+        const meta = (it.h ? `${it.h} שעות` : (it.extra ? 'תרגול נוסף (לא פרק רשמי)' : 'ניסוי מעבדה')) + ` · ${subs.length === 1 ? 'תת-נושא אחד' : `${subs.length} תת-נושאים`}` + (practiceLevels ? ` · ${practiceLevels} שלבי תרגול` : ' · אין עדיין תרגול');
         const expanded = state.curriculumExpanded.has(key);
         const subsHtml = subs.length ? subs.map(sb => `
           <div class="reveal-sub-row">
@@ -278,7 +282,7 @@ export async function mountDashboard(app, session, onLogout) {
         return `
         <div>
           <div class="reveal-row">
-            <span class="reveal-row-n">${String(it.n).padStart(2, '0')}</span>
+            <span class="reveal-row-n">${/^\d+$/.test(String(it.n)) ? String(it.n).padStart(2, '0') : escapeHtml(String(it.n))}</span>
             <span class="reveal-row-dot" style="background:${it.color || 'var(--px-hairline-strong)'};"></span>
             <div style="flex:1;min-width:0;">
               <div class="reveal-row-title">${escapeHtml(it.title)}</div>
@@ -296,7 +300,7 @@ export async function mountDashboard(app, session, onLogout) {
         <div class="reveal-head">
           <div>
             <div class="reveal-head-title">${escapeHtml(sec.grade)} · ${escapeHtml(sec.part)}</div>
-            <div class="reveal-head-meta">${sec.hours} שעות · ${sec.items.length} פרקים · ${shown} מתוך ${keys.length} חשופים</div>
+            <div class="reveal-head-meta">${sec.hours} שעות · ${officialKeys.length} פרקים · ${shown} מתוך ${officialKeys.length} חשופים${extraKeys.length ? ` · תרגול נוסף: ${extraShown} מתוך ${extraKeys.length} חשוף` : ''}</div>
           </div>
           <div class="reveal-head-actions">
             <button type="button" class="secondary reveal-all-btn" data-grade="${grade}" data-keys="${keys.join(',')}">לחשוף הכל</button>

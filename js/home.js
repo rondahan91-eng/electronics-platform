@@ -110,16 +110,17 @@ export async function mountHome(app, session, onLogout) {
 
   function render() {
     const revealedItems = [];
-    let totalChapters = 0;
+    let totalChapters = 0, officialRevealed = 0; // "תרגול נוסף" (extra) אינו פרק רשמי: לא נספר במניין הפרקים, אבל השלבים שלו כן נספרים
     const sectionsHtml = SYLLABUS.map(sec => {
-      totalChapters += sec.items.length;
+      const official = sec.items.filter(it => !it.extra).length;
+      totalChapters += official;
       const items = sec.items.filter(it => revealedSet.has(chapterKey(sec.key, it.n)));
-      items.forEach(it => revealedItems.push(it));
+      items.forEach(it => { revealedItems.push(it); if (!it.extra) officialRevealed++; });
       if (!items.length) return '';
       return `
       <div class="syllabus-section">
         <div class="section-head-row">
-          <b>${sec.grade}</b><span>${sec.part}</span><span class="rule"></span><span class="hours-label">${sec.hours} שעות · ${sec.items.length} פרקים</span>
+          <b>${sec.grade}</b><span>${sec.part}</span><span class="rule"></span><span class="hours-label">${sec.hours} שעות · ${official} פרקים</span>
         </div>
         <div class="chapter-list">${items.map(it => chapterCardHtml(sec, it)).join('')}</div>
       </div>`;
@@ -140,7 +141,7 @@ export async function mountHome(app, session, onLogout) {
             <h1>הפרקים שלי</h1>
           </div>
           <div class="home-stats">
-            <div class="mini-stat"><div class="mini-stat-label">פרקים חשופים</div><div class="mini-stat-value">${revealedItems.length}<span>/${totalChapters}</span></div></div>
+            <div class="mini-stat"><div class="mini-stat-label">פרקים חשופים</div><div class="mini-stat-value">${officialRevealed}<span>/${totalChapters}</span></div></div>
             <div class="mini-stat"><div class="mini-stat-label">שלבים שנפתרו</div><div class="mini-stat-value">${solvedLevels}<span>/${openLevels}</span></div></div>
           </div>
         </div>

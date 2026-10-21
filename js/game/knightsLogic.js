@@ -67,26 +67,31 @@ export function solutionRow(ex) {
 }
 
 // ---------------------------------------------------------------- שלב 1: בניית הפסוק מרצף סמלים
-/** tokens: מערך מחרוזות מתוך ¬ ∧ ∨ ושמות משתנים. מחזיר { ok, reason } כש-reason: 'empty' | 'syntax' | 'op' | 'lits'. */
+/** tokens: מערך מחרוזות מתוך ¬ ∧ ∨ ושמות משתנים. מחזיר { ok, reason }; reason: 'empty' (אין כלום), 'incomplete' (הפסוק נגמר באמצע),
+ *  'malformed' (סמל במקום לא נכון, שלילה כפולה או סמלים עודפים אחרי פסוק שלם). בדיקת checkFormula מוסיפה 'op' ו-'lits'. */
 export function parseFormula(ex, tokens) {
   const isVar = t => ex.vars.includes(t);
   let i = 0;
+  const END = 'end'; // נגמרו הסמלים לפני שהפסוק הושלם
   const lit = () => {
     let neg = 0;
     if (tokens[i] === NOT) { neg = 1; i++; }
-    if (i < tokens.length && isVar(tokens[i])) { const v = tokens[i]; i++; return [v, neg]; }
+    if (i >= tokens.length) return END;
+    if (isVar(tokens[i])) { const v = tokens[i]; i++; return [v, neg]; }
     return null;
   };
   if (!tokens.length) return { ok: false, reason: 'empty' };
   const a = lit();
-  if (!a) return { ok: false, reason: 'syntax' };
-  if (i >= tokens.length) return { ok: false, reason: 'syntax', partial: [a] };
+  if (a === END) return { ok: false, reason: 'incomplete' };
+  if (!a) return { ok: false, reason: 'malformed' };
+  if (i >= tokens.length) return { ok: false, reason: 'incomplete', partial: [a] };
   const opTok = tokens[i];
   const op = opTok === OPS.and ? 'and' : opTok === OPS.or ? 'or' : null;
-  if (!op) return { ok: false, reason: 'syntax' };
+  if (!op) return { ok: false, reason: 'malformed' };
   i++;
   const b = lit();
-  if (!b || i !== tokens.length) return { ok: false, reason: 'syntax' };
+  if (b === END) return { ok: false, reason: 'incomplete' };
+  if (!b || i !== tokens.length) return { ok: false, reason: 'malformed' };
   return { ok: true, op, lits: [a, b] };
 }
 const litKey = l => `${l[1] ? '!' : ''}${l[0]}`;

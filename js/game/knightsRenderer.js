@@ -122,12 +122,12 @@ function lidSvg(kind, x, y) {
   const mark = (fill, extra = '') => `<text x="${x}" y="${y + 17}" text-anchor="middle" direction="ltr" font-size="50" font-weight="800" fill="${fill}" ${extra}>${q}</text>`;
   if (kind === 'plate') {
     return `<g class="kn-lid kn-lid-plate"><g class="kn-lid-body">`
-      + `<rect x="${x - 34}" y="${y - 34}" width="68" height="68" rx="10" fill="#7f8c99" stroke="#cdd7e0" stroke-width="3"/>`
+      + `<rect x="${x - 34}" y="${y - 34}" width="68" height="68" rx="10" fill="#5f6d7b" stroke="#cdd7e0" stroke-width="3"/>`
       + `<rect x="${x - 31}" y="${y - 31}" width="62" height="28" rx="7" fill="#fff" opacity=".16"/>`
       + [[-26, -26], [26, -26], [-26, 26], [26, 26]].map(([dx, dy]) => `<circle cx="${x + dx}" cy="${y + dy}" r="4" fill="#4d5966" stroke="#c4cfd9" stroke-width="1.2"/>`).join('')
       + `<rect x="${x - 15}" y="${y - 47}" width="30" height="14" rx="6" fill="#5c6874" stroke="#cdd7e0" stroke-width="2"/>`
       + `<text x="${x + 1.6}" y="${y + 18.6}" text-anchor="middle" direction="ltr" font-size="50" font-weight="800" fill="#46525e">${q}</text>`
-      + mark('#dbe3ea')
+      + mark('#f4f7fa')
       + `</g><rect class="kn-sheen" x="${x - 6}" y="${y - 32}" width="12" height="62" fill="#fff" opacity=".55" transform="skewX(-18)"/></g>`;
   }
   if (kind === 'cover') {
@@ -298,8 +298,8 @@ function verdictWord(p, v) {
 function pillSvg(cx, p, solved, verdict) {
   const y = 436, h = 42, w = 176;
   if (!solved) {
-    return `<g class="kn-pill"><rect x="${cx - w / 2}" y="${y}" width="${w}" height="${h}" rx="18" fill="#fff" fill-opacity=".07" stroke="#8aa0ae" stroke-width="2.2" stroke-dasharray="6 5"/>`
-      + `<text x="${cx}" y="${y + 32}" text-anchor="middle" direction="ltr" font-size="31" font-weight="800" fill="#c3d3dc">?</text></g>`;
+    return `<g class="kn-pill"><rect x="${cx - w / 2}" y="${y}" width="${w}" height="${h}" rx="18" fill="#0b1f33" fill-opacity=".6" stroke="#b9c9d3" stroke-width="2.2" stroke-dasharray="6 5"/>`
+      + `<text x="${cx}" y="${y + 32}" text-anchor="middle" direction="ltr" font-size="31" font-weight="800" fill="#ffffff">?</text></g>`;
   }
   const ok = !!verdict;
   const fill = ok ? '#0b7f53' : '#c13c2b', edge = ok ? 'var(--px-brand-bright, #3ddc97)' : 'var(--px-coral, #f4715c)';
@@ -394,8 +394,8 @@ const STYLE = `
 @keyframes kn-talk { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
 @keyframes kn-altA { 0%,42% { opacity: 1; } 52%,92% { opacity: .12; } 100% { opacity: 1; } }
 @keyframes kn-altB { 0%,42% { opacity: .12; } 52%,92% { opacity: 1; } 100% { opacity: .12; } }
-@keyframes kn-bumpA { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-9px); } }
-@keyframes kn-bumpB { 0%,100% { transform: translateX(0); } 50% { transform: translateX(9px); } }
+@keyframes kn-bumpA { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-4px); } }
+@keyframes kn-bumpB { 0%,100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
 @keyframes kn-turnA { 0%,46% { transform: translateY(-7px); opacity: 1; } 54%,96% { transform: translateY(0); opacity: .72; } 100% { transform: translateY(-7px); opacity: 1; } }
 @keyframes kn-turnB { 0%,46% { transform: translateY(0); opacity: .72; } 54%,96% { transform: translateY(-7px); opacity: 1; } 100% { transform: translateY(0); opacity: .72; } }
 @keyframes kn-onA { 0%,46% { opacity: 1; } 50%,96% { opacity: 0; } 100% { opacity: 1; } }
@@ -510,7 +510,7 @@ function sceneDuel(c) {
   const ya = 690, ka = 210;
   const Y = technician({ cx: ya, p: pY, look: LOOKS[0], solved, verdict: vals[pY.v], speaking: true, gaze: [-3, 0], arms: { l: { t: 'point', to: [ka + 70, 392], ray: null } } });
   const K = technician({ cx: ka, p: pK, look: LOOKS[1], solved, verdict: vals[pK.v], speaking: true, gaze: [3, 0], arms: { r: { t: 'point', to: [ya - 70, 392], ray: null } } });
-  // שני הבלונים נוגעים/חופפים באמצע בדיוק ברוחב הריפוד: הטקסטים לא נחתכים גם כשהאנימציה מקרבת אותם
+  // בין הטקסטים נשארת רווחה של כ-15px במנוחה; האנימציה מקרבת כל בלון ב-4px לכל היותר, כך שהטקסט של אחד לא מוסתר בידי גוף הבלון של השני
   const bK = bubble({ text: ex.quotes[1], anchor: 'r', ax: 468, top: 138, maxW: 400, padX: 48, tail: { x: ka, y: 282 }, cls: 'kn-bump-b', solved, verdict: vals[pK.v] });
   const bY = bubble({ text: ex.quotes[0], anchor: 'l', ax: 432, top: 116, maxW: 400, padX: 48, tail: { x: ya, y: 282 }, cls: 'kn-bump-a', solved, verdict: vals[pY.v] });
   const sign = `<polygon points="450,20 486,82 414,82" fill="#f2a93b" stroke="#3b2300" stroke-width="4" stroke-linejoin="round" opacity=".9"/>`
