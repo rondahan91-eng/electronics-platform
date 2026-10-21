@@ -1,21 +1,23 @@
 // ==========================================================================
 // knightsPanel.js - פאנל התשובה האינטראקטיבי בן ארבעת השלבים של "צדיקים ונוכלים".
-//   שלב 1: מהמלל לפסוק (תפריט סמלים קבוע, בלי הקלדה חופשית)   שלב 2: שיבוץ חלקי הפסוק בעמודות (גרירה + בחירה בלחיצה/מקלדת)
-//   שלב 3: רישום הקביעות בכל שורה                              שלב 4: בדיקת עקביות (✓/✗) והמסקנה
-// כל ההיגיון (שורות, בדיקת פסוק, חלקים, קביעות, עקביות) מגיע מ-knightsLogic.js; כאן רק ממשק.
+// השיטה היא כפי שנלמדה בכיתה: תנאי העקביות של דובר הוא פסוק "אם ורק אם"  x ⟺ (מה שהוא אמר), ושורה עקבית כשהתנאי של כולם אמת.
+//   שלב 1: מהמלל לתנאי העקביות (תפריט סמלים קבוע: משתנים ¬ ∧ ∨ ⟺ וסוגריים, בלי הקלדה חופשית)
+//   שלב 2: שיבוץ חלקי התנאי בעמודות (גרירה + בחירה בלחיצה/מקלדת)   שלב 3: חישוב ערך הפסוק בכל שורה (אמת/שקר)
+//   שלב 4: חישוב תנאי העקביות בכל שורה (✓ = אמת, ✗ = שקר), ובשני דוברים גם סימון השורה העקבית, והמסקנה
+// כל ההיגיון (שורות, בדיקת תנאי, חלקים, ערכים) מגיע מ-knightsLogic.js; כאן רק ממשק.
 // חוזה מול המנוע (gameEngine.js, topic.mountPanel): mountKnightsPanel(container, level, api) -> dispose.
 //   api.wrongAttempt() בכל בדיקה כושלת של ממש (לא על קלט חסר/לא שלם), api.solved() פעם אחת בסיום שלב 4.
 //   גרירה/בחירה של חלק לעמודה לא נכונה היא טעות חקירה: api.wrongAttempt({ soft: true }) (צליל בלבד, בלי ספירה ובלי שמירה לשרת).
 // הסגנון מוזרק פעם אחת (#knights-panel-style), כל המחלקות בקידומת kn-.
 // ==========================================================================
 import {
-  rows, table, checkFormula, chips, columns, placeChip, checkDeterminations, checkConsistency,
-  sentenceText, columnName, varMeaning, personOf, NOT, OPS,
+  rows, table, checkCondition, chips, columns, placeChip, checkDeterminations, checkConditions, checkConsistency,
+  sentenceText, conditionText, tokensText, columnName, varMeaning, personOf, NOT, OPS, IFF, LP, RP,
 } from './knightsLogic.js';
 
 const STYLE_ID = 'knights-panel-style';
-const TITLES = ['מהמלל לפסוק', 'שיבוץ חלקי הפסוק בעמודות', 'רישום הקביעות', 'בדיקת עקביות'];
-const MAX_TOKENS = 8;
+const TITLES = ['מהמלל לתנאי העקביות', 'שיבוץ חלקי התנאי בעמודות', 'חישוב הפסוק בכל שורה', 'בדיקת תנאי העקביות'];
+const MAX_TOKENS = 11; // הארוך ביותר: a ⟺ (¬a ∨ ¬L) = 9 סמלים
 // בדיקה על קלט חסר (פסוק ריק או לא שלם, תאים ריקים בטבלה) מציגה הודעה אבל לא נספרת כניסיון שגוי, כמו קלט לא תקין בשדה התשובה הרגיל
 // של המנוע. מי שרוצה לספור גם אותה (ולהשמיע את צליל השגיאה) משנה ל-true.
 const COUNT_INCOMPLETE_AS_WRONG = false;
@@ -27,15 +29,9 @@ const iso = s => `\u2066${s}\u2069`; // בידוד כיווני לטקסט פש�
 const tv = b => (b ? 'אמת' : 'שקר');
 const reducedMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-/** פסוק כמחרוזת: בלי רווח אחרי ¬ ("¬x ∧ L"). */
-function tokensText(tokens) {
-  let out = '';
-  tokens.forEach((t, i) => { if (i > 0 && tokens[i - 1] !== NOT) out += ' '; out += t; });
-  return out;
-}
-/** הקראה לקורא מסך: ¬ = "לא", ∧ = "וגם", ∨ = "או". */
+/** הקראה לקורא מסך: ¬ = "לא", ∧ = "וגם", ∨ = "או", ⟺ = "אם ורק אם". */
 function spoken(tokens) {
-  return tokens.map(t => (t === NOT ? 'לא' : t === OPS.and ? 'וגם' : t === OPS.or ? 'או' : t)).join(' ');
+  return tokens.map(t => (t === NOT ? 'לא' : t === OPS.and ? 'וגם' : t === OPS.or ? 'או' : t === IFF ? 'אם ורק אם' : t === LP ? 'סוגר פותח' : t === RP ? 'סוגר סוגר' : t)).join(' ');
 }
 /** רשימה בעברית: "a", "a ו-b", "a, b ו-c" (הפריטים כבר HTML; הפריט האחרון מקבל ו' צמודה). */
 function heList(items, and = 'ו') {
@@ -127,7 +123,7 @@ const CSS = `
 .kn-tray-empty{color:var(--kn-am-fg);font-weight:700}
 .kn-chip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;min-width:60px;padding:6px 14px;border:2px solid var(--kn-ctl-line);border-radius:12px;background:#fff;
   cursor:grab;user-select:none;-webkit-user-select:none;touch-action:manipulation;color:var(--kn-navy)}
-.kn-chip.kn-whole{border-color:var(--kn-navy);background:var(--kn-navy-soft)}
+.kn-chip.kn-sent,.kn-chip.kn-cond{border-color:var(--kn-navy);background:var(--kn-navy-soft)}
 .kn-chip:hover{border-color:var(--kn-navy)}
 .kn-chip.is-selected{background:var(--kn-navy);border-color:var(--kn-navy);color:#fff;box-shadow:0 0 0 4px rgba(23,58,109,.25)}
 .kn-chip.is-selected .kn-chip-kind{color:#dbe6f7}
@@ -168,7 +164,7 @@ const CSS = `
 .kn-scrollhint.show{display:block}
 /* בטבלת העקביות (תשעה טורים בשני דוברים) עמודת השורה ועמודת הסימון נשארות בתצוגה בזמן גלילה אופקית */
 .kn-t4 thead tr:first-child>th:first-child,.kn-t4 tbody th{position:sticky;inset-inline-start:0;z-index:2}
-.kn-t4 thead tr:first-child>th:last-child,.kn-t4 .kn-markcell{position:sticky;inset-inline-end:0;z-index:2}
+.kn-t4 th.kn-th-mark,.kn-t4 td.kn-markcell:last-child{position:sticky;inset-inline-end:0;z-index:2}
 .kn-th-sub{display:block;font:600 11px/1.3 var(--font-mono,ui-monospace,monospace);color:var(--kn-navy-2);direction:ltr;unicode-bidi:isolate}
 .kn-val{font-weight:700;min-width:46px}
 .kn-val.is-t{background:var(--kn-t-bg);color:var(--kn-t-fg)}
@@ -226,6 +222,9 @@ const CSS = `
   .kn-t4 thead th{white-space:normal;line-height:1.25;padding:3px 1px;font-size:10px}
   .kn-t4 .kn-th-sub{font-size:9px}
   .kn-val{min-width:20px}
+  .kn-t4 .kn-mark[data-act="cond"]{min-width:34px;padding-inline:0} /* תא התנאי: שלוש עמודות כפתורים בטבלה בת תשע עמודות, והיא צריכה להיכנס ב-360px */
+  .kn-t4 td.kn-markcell{padding-inline:1px}
+  .kn-t4 .kn-val{font-size:11px;padding-inline:1px}
   .kn-panel button.kn-toggle{min-height:40px}
   .kn-panel button.kn-cell{min-width:40px;min-height:40px;padding:3px 2px;font-size:12px;border-width:2px}
   .kn-panel button.kn-mark{min-width:40px;min-height:40px;padding:3px 2px}
@@ -265,10 +264,9 @@ export function mountKnightsPanel(container, level, api) {
   const nS = ex.sentences.length, nV = ex.vars.length;
   const solution = T.find(r => r.consistent);
   const sName = i => { const p = personOf(ex, ex.sentences[i].speaker); return p ? p.name : ''; };
-  const sLabel = i => `S${nS > 1 ? ex.sentences[i].speaker : ''}`;
   const hintList = k => (ex.hints && (ex.hints[String(k)] || ex.hints[k])) || [];
   const titleOf = k => (ex.stageTitles && ex.stageTitles[String(k)]) || TITLES[k - 1];
-  const ruleHtml = t => String(t).split(/(\{[^}]*\})/).map(part => (/^\{[^}]*\}$/.test(part) ? ltr(part.slice(1, -1)) : esc(part))).join(''); // {x = S} = נוסחה משמאל לימין
+  const ruleHtml = t => String(t).split(/(\{[^}]*\})/).map(part => (/^\{[^}]*\}$/.test(part) ? ltr(part.slice(1, -1)) : esc(part))).join(''); // {x ⟺ (A ∨ B)} = נוסחה משמאל לימין
 
   const S = {
     status: [null, 'active', 'locked', 'locked', 'locked'],
@@ -278,6 +276,8 @@ export function mountKnightsPanel(container, level, api) {
     placed: {}, selected: null, dragging: null,
     dets: Object.fromEntries(R.map(r => [r.n, ex.sentences.map(() => null)])),
     detLock: {}, detBad: {}, detNeed: {},
+    conds: Object.fromEntries(R.map(r => [r.n, ex.sentences.map(() => null)])),
+    condLock: {}, condBad: {}, condNeed: {},
     marks: Object.fromEntries(R.map(r => [r.n, null])),
     markLock: {}, markBad: {}, markNeed: {},
     hints: [0, 0, 0, 0, 0],
@@ -373,14 +373,14 @@ export function mountKnightsPanel(container, level, api) {
   // ---- מחזור החיים של השלבים
   function summaryHtml(k) {
     if (k === 1) {
-      return `${nS > 1 ? 'הפסוקים נבנו' : 'הפסוק נבנה'}: ${ex.sentences.map((s, i) => {
-        const built = tokensText(S.sent[i].tokens), canon = sentenceText(s);
-        // ∧ ו-∨ אינם תלויי סדר, ולכן הסדר ההפוך מתקבל; בשלבים הבאים מוצג הפסוק בסדר שבמסמך
+      return `${nS > 1 ? 'התנאים נבנו' : 'התנאי נבנה'}: ${ex.sentences.map((s, i) => {
+        const built = tokensText(S.sent[i].tokens), canon = conditionText(ex, i);
+        // ∧ ו-∨ וגם ⟺ אינם תלויי סדר, ולכן הסדר ההפוך מתקבל; בשלבים הבאים מוצג התנאי בסדר הרגיל
         return `${nS > 1 ? `${esc(sName(i))}: ` : ''}${ltr(built)}${built !== canon ? ` (שקול ל־${ltr(canon)}, וכך הוא מופיע בשלבים הבאים)` : ''}`;
       }).join(' · ')}`;
     }
     if (k === 2) return `כל ${CHIPS.length} החלקים שובצו בעמודות המתאימות.`;
-    if (k === 3) return `הקביעות נרשמו בכל ${R.length} השורות.`;
+    if (k === 3) return `ערכי ${nS > 1 ? 'הפסוקים' : 'הפסוק'} נרשמו בכל ${R.length} השורות.`;
     return `שורה ${solution.n} היא השורה העקבית היחידה.`;
   }
   function refreshStage(k) {
@@ -409,7 +409,7 @@ export function mountKnightsPanel(container, level, api) {
       if (k === 1) ex.sentences.forEach((_, i) => renderSent(i));
       if (k === 2) renderS2();
       if (k === 3) refreshAllDet();
-      if (k === 4) refreshAllMarks();
+      if (k === 4) { refreshAllConds(); refreshAllMarks(); }
       updateHintUi(k);
     }
     refreshStage(k);
@@ -435,27 +435,27 @@ export function mountKnightsPanel(container, level, api) {
   // ================================================================ שלב 1
   function sentHtml(i) {
     const nm = sName(i);
-    const ops = [[NOT, 'לא'], [OPS.and, 'וגם'], [OPS.or, 'או']];
+    const ops = [[NOT, 'לא'], [OPS.and, 'וגם'], [OPS.or, 'או'], [IFF, 'אם ורק אם'], [LP, 'סוגר פותח'], [RP, 'סוגר סוגר']];
     const varBtns = ex.vars.map(v => `<button type="button" class="kn-sym kn-var" data-act="tok" data-i="${i}" data-tok="${esc(v)}" aria-label="${esc(iso(v))}: ${esc(varMeaning(ex, v))}"><span class="kn-sym-main">${esc(v)}</span><span class="kn-sym-sub">${esc(varMeaning(ex, v))}</span></button>`).join('');
     const opBtns = ops.map(([t, w]) => `<button type="button" class="kn-sym kn-op" data-act="tok" data-i="${i}" data-tok="${t}" aria-label="${w}, ${t}"><span class="kn-sym-main">${t}</span><span class="kn-sym-sub">${w}</span></button>`).join('');
     return `<div class="kn-sent" data-sent="${i}">
       <div class="kn-sent-head"><span class="kn-label">המשפט של ${esc(nm)}:</span><span class="kn-sent-quote">“${esc(ex.quotes[i] || '')}”</span></div>
       <div class="kn-formula-row">
-        <output class="kn-formula" dir="ltr" data-formula="${i}" aria-label="הפסוק של ${esc(nm)}"></output>
+        <output class="kn-formula" dir="ltr" data-formula="${i}" aria-label="תנאי העקביות של ${esc(nm)}"></output>
         <span class="kn-sent-mark" data-mark="${i}" aria-hidden="true"></span>
       </div>
-      <div class="kn-menu" role="group" aria-label="תפריט סמלים לבניית הפסוק של ${esc(nm)}">
+      <div class="kn-menu" role="group" aria-label="תפריט סמלים לבניית תנאי העקביות של ${esc(nm)}">
         <div class="kn-menu-group">${varBtns}</div>
         <div class="kn-menu-group">${opBtns}</div>
         <div class="kn-menu-group">
           <button type="button" class="secondary kn-sym kn-ctl" data-act="back" data-i="${i}" aria-label="מחיקת הסמל האחרון"><span class="kn-sym-main" aria-hidden="true">⌫</span><span class="kn-sym-sub">מחיקה</span></button>
-          <button type="button" class="secondary kn-sym kn-ctl" data-act="clear" data-i="${i}" aria-label="ניקוי כל הפסוק"><span class="kn-sym-main" aria-hidden="true">✕</span><span class="kn-sym-sub">ניקוי</span></button>
+          <button type="button" class="secondary kn-sym kn-ctl" data-act="clear" data-i="${i}" aria-label="ניקוי כל התנאי"><span class="kn-sym-main" aria-hidden="true">✕</span><span class="kn-sym-sub">ניקוי</span></button>
         </div>
       </div>
     </div>`;
   }
   function body1() {
-    return `<p class="kn-lead">${nS > 1 ? 'קראו כל משפט ובנו לו פסוק לוגי משלו' : 'קראו את מה שנאמר ובנו את הפסוק הלוגי המתאים'} מתוך תפריט הסמלים (${ltr('¬')} ${ltr('∧')} ${ltr('∨')} והמשתנים). אין צורך להקליד, רק ללחוץ על הלחצנים.</p>
+    return `<p class="kn-lead">${nS > 1 ? 'קראו כל משפט ובנו לו תנאי עקביות משלו' : 'קראו את מה שנאמר ובנו את תנאי העקביות'} מתוך תפריט הסמלים. תנאי העקביות הוא פסוק "אם ורק אם": "הדובר צדיק" ${ltr('⟺')} "מה שהוא אמר נכון". כלומר המשתנה של הדובר, אחריו ${ltr('⟺')}, ואחריו הפסוק שהוא אמר, בסוגריים. אין צורך להקליד, רק ללחוץ על הלחצנים.</p>
       ${ex.sentences.map((_, i) => sentHtml(i)).join('')}
       <div class="kn-actions"><button type="button" class="kn-check" data-act="check1">בדיקה</button>${hintBlock(1)}</div>
       <div class="kn-fb" data-fb="1" role="status" aria-live="polite"></div>
@@ -468,7 +468,7 @@ export function mountKnightsPanel(container, level, api) {
     const out = q(`[data-formula="${i}"]`, blk);
     out.innerHTML = st.tokens.length
       ? `<span aria-hidden="true" dir="ltr">${esc(tokensText(st.tokens))}</span><span class="kn-sr-only">${esc(spoken(st.tokens))}</span>`
-      : '<span class="kn-ph" dir="rtl">הפסוק יופיע כאן</span>';
+      : '<span class="kn-ph" dir="rtl">התנאי יופיע כאן</span>';
     blk.classList.toggle('is-ok', st.ok);
     blk.classList.toggle('is-bad', st.bad && !st.ok);
     q(`[data-mark="${i}"]`, blk).textContent = st.ok ? '✓' : st.bad ? '!' : '';
@@ -483,35 +483,39 @@ export function mountKnightsPanel(container, level, api) {
     const st = S.sent[i];
     if (st.ok) return;
     if (st.tokens.length >= MAX_TOKENS) {
-      announce('הפסוק ארוך מדי. מחקו סמל לפני שמוסיפים עוד.');
-      showFb(1, [{ k: 'note', html: `${nS > 1 ? `${esc(sName(i))}: ` : ''}הפסוק ארוך מדי. מחקו סמל לפני שמוסיפים עוד.` }]);
+      announce('התנאי ארוך מדי. מחקו סמל לפני שמוסיפים עוד.');
+      showFb(1, [{ k: 'note', html: `${nS > 1 ? `${esc(sName(i))}: ` : ''}התנאי ארוך מדי. מחקו סמל לפני שמוסיפים עוד.` }]);
       return;
     }
     st.tokens.push(tok); st.bad = false;
     refreshS1Fb();
     renderSent(i);
   }
+  const SHAPE = () => `תנאי עקביות בנוי כך: משתנה, ${ltr('⟺')}, ואז הפסוק של הדובר בסוגריים (שני חלקים עם קשר אחד ביניהם, ולכל חלק אפשר גם ${ltr('¬')}).`;
   function check1() {
     const lines = [];
     let allOk = true, failed = false;
-    ex.sentences.forEach((_, i) => {
+    ex.sentences.forEach((s, i) => {
       const st = S.sent[i];
       const who = nS > 1 ? `המשפט של ${esc(sName(i))}: ` : '';
-      if (st.ok) { lines.push({ k: 'ok', html: `${who}הפסוק נכון.` }); return; }
-      const r = checkFormula(ex, i, st.tokens);
-      if (r.ok) { st.ok = true; st.bad = false; st.msg = ''; lines.push({ k: 'ok', html: `${who}הפסוק נכון.` }); return; }
+      if (st.ok) { lines.push({ k: 'ok', html: `${who}התנאי נכון.` }); return; }
+      const r = checkCondition(ex, i, st.tokens);
+      if (r.ok) { st.ok = true; st.bad = false; st.msg = ''; lines.push({ k: 'ok', html: `${who}התנאי נכון.` }); return; }
       allOk = false; st.bad = true;
       let msg;
-      if (r.reason === 'empty') { msg = 'עוד לא נבנה פסוק.'; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
-      else if (r.reason === 'incomplete') { msg = `הפסוק לא שלם. פסוק כאן בנוי משני חלקים (משתנה, ואפשר גם ${ltr('¬')} לפניו) עם קשר אחד ביניהם.`; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
-      else if (r.reason === 'malformed') { msg = `בפסוק יש סמל במקום לא נכון או יותר מדי סמלים. פסוק כאן בנוי משני חלקים (משתנה, ואפשר גם ${ltr('¬')} לפניו) עם קשר אחד ביניהם.`; failed = true; }
+      if (r.reason === 'empty') { msg = 'עוד לא נבנה תנאי.'; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
+      else if (r.reason === 'incomplete') { msg = `התנאי לא שלם. ${SHAPE()}`; if (COUNT_INCOMPLETE_AS_WRONG) failed = true; }
+      else if (r.reason === 'noiff') { msg = `זה הפסוק של הדובר, אבל תנאי העקביות צריך להיות פסוק "אם ורק אם": המשתנה של הדובר ${ltr('⟺')} הפסוק בסוגריים.`; failed = true; }
+      else if (r.reason === 'paren') { msg = `חסרים סוגריים סביב הפסוק. כותבים: משתנה ${ltr('⟺')} (הפסוק).`; failed = true; }
+      else if (r.reason === 'malformed') { msg = `בתנאי יש סמל במקום לא נכון או יותר מדי סמלים. ${SHAPE()}`; failed = true; }
+      else if (r.reason === 'who') { msg = `בצד אחד של ${ltr('⟺')} צריך להיות המשתנה של הדובר: ${ltr(s.speaker)} = "${esc(varMeaning(ex, s.speaker))}".`; failed = true; }
       else if (r.reason === 'op') { msg = 'החלקים נכונים, אבל הקשר ביניהם לא. שימו לב למילת הקישור במשפט: "וגם" או "או".'; failed = true; }
       else { msg = `אחד החלקים (או שניהם) לא מתאים. בדקו את השלילות (${ltr('¬')}) ואת המשתנה שבכל חלק.`; failed = true; }
       st.msg = who + msg;
       lines.push({ k: 'bad', html: st.msg });
     });
     ex.sentences.forEach((_, i) => renderSent(i));
-    if (allOk) { showFb(1, [{ k: 'ok', html: nS > 1 ? 'כל הפסוקים נכונים.' : 'הפסוק נכון.' }]); completeStage(1); return; }
+    if (allOk) { showFb(1, [{ k: 'ok', html: nS > 1 ? 'כל התנאים נכונים.' : 'התנאי נכון.' }]); completeStage(1); return; }
     showFb(1, lines);
     announce(lines.map(l => l.html.replace(/<[^>]+>/g, '')).join(' '));
     if (failed) wrong();
@@ -519,7 +523,7 @@ export function mountKnightsPanel(container, level, api) {
 
   // ================================================================ שלב 2
   function body2() {
-    return `<p class="kn-lead">פרקו את הפסוק לחלקיו ושבצו כל חלק בעמודה שהוא מתאר: עמודת זהות של דובר${ex.facts.length ? ', או עמודת עובדה חיצונית כמו נורית' : ''}. חלק לא משבצים בעמודת הקביעה, כי היא מחושבת ולא מוזנת. את הפסוק השלם משבצים בעמודת הקביעה${nS > 1 ? ' של אותו דובר' : ''}.</p>
+    return `<p class="kn-lead">פרקו את התנאי לחלקיו ושבצו כל חלק בעמודה שמתאימה לו. חלק שמתאר זהות של דובר${ex.facts.length ? ' או עובדה חיצונית (כמו נורית)' : ''} הולך לעמודה של אותו משתנה. הפסוק השלם הולך לעמודת "הפסוק", ותנאי העקביות כולו (עם ${ltr('⟺')}) לעמודת "תנאי העקביות"${nS > 1 ? ' של אותו דובר' : ''}. שתי העמודות האלה מחושבות ולא מוזנות.</p>
       <p class="kn-lead">גררו חלק לעמודה, או בחרו חלק (לחיצה, או Enter / רווח במקלדת) ואז בחרו עמודה. חלק ששובץ לא נכון חוזר למקומו.</p>
       <div class="kn-s2">
         <div class="kn-tray" data-tray role="group" aria-label="חלקים לשיבוץ"></div>
@@ -530,12 +534,13 @@ export function mountKnightsPanel(container, level, api) {
       ${hintsHost(2)}`;
   }
   const chipEl = id => q(`.kn-chip[data-chip="${id}"]`);
+  const KIND_LABEL = { part: 'חלק', sent: 'הפסוק', cond: 'התנאי' };
+  const KIND_ARIA = { part: 'חלק מהפסוק', sent: 'הפסוק כולו', cond: 'תנאי העקביות כולו' };
   function chipHtml(c) {
     const sel = S.selected === c.id;
-    const whole = c.kind === 'whole';
-    return `<div class="kn-chip ${whole ? 'kn-whole' : 'kn-part'}${sel ? ' is-selected' : ''}" role="button" tabindex="0" draggable="true" aria-pressed="${sel}" data-chip="${c.id}" data-fk="chip-${c.id}"
-      aria-label="${whole ? 'הפסוק כולו' : 'חלק מהפסוק'} ${esc(iso(c.text))}${nS > 1 ? `, של ${esc(sName(c.sentence))}` : ''}">
-      <span class="kn-chip-text" dir="ltr">${esc(c.text)}</span><span class="kn-chip-kind">${whole ? 'פסוק שלם' : 'חלק'}</span></div>`;
+    return `<div class="kn-chip kn-${c.kind}${sel ? ' is-selected' : ''}" role="button" tabindex="0" draggable="true" aria-pressed="${sel}" data-chip="${c.id}" data-fk="chip-${c.id}"
+      aria-label="${KIND_ARIA[c.kind]} ${esc(iso(c.text))}${nS > 1 ? `, של ${esc(sName(c.sentence))}` : ''}">
+      <span class="kn-chip-text" dir="ltr">${esc(c.text)}</span><span class="kn-chip-kind">${KIND_LABEL[c.kind]}</span></div>`;
   }
   function placedHtml(c) {
     return `<span class="kn-placed"><span class="kn-chip-text" dir="ltr">${esc(c.text)}</span>${nS > 1 ? `<span class="kn-chip-kind">${esc(sName(c.sentence))}</span>` : ''}</span>`;
@@ -543,7 +548,7 @@ export function mountKnightsPanel(container, level, api) {
   function colHtml(col) {
     const here = CHIPS.filter(c => S.placed[c.id] === col.id);
     const isVar = col.kind === 'var';
-    const sub = isVar ? `${personOf(ex, col.v) ? 'זהות' : 'עובדה'} · ${ltr(col.v)}` : 'תוצאה מחושבת';
+    const sub = isVar ? `${personOf(ex, col.v) ? 'זהות' : 'עובדה'} · ${ltr(col.v)}` : col.kind === 'sent' ? 'ערך הפסוק, מחושב' : 'ערך התנאי, מחושב';
     const done = S.status[2] === 'done';
     const label = `עמודת ${col.name}${here.length ? `. שובצו בה: ${here.map(c => iso(c.text)).join(', ')}` : ''}${done ? '' : `. ${S.selected ? 'לחצו כדי לשבץ כאן את החלק הנבחר' : 'בחרו קודם חלק לשיבוץ'}`}`;
     return `<div class="kn-col ${isVar ? 'kn-col-var' : 'kn-col-det'}" data-col="${col.id}">
@@ -575,8 +580,13 @@ export function mountKnightsPanel(container, level, api) {
     announce(S.selected ? `נבחר ${c.text}. בחרו עמודה לשיבוץ.` : 'הבחירה בוטלה.');
   }
   function dropReason(chip, col) {
-    if (chip.kind === 'part') return col.kind === 'det' ? 'חלק מתאר זהות או עובדה, ולא את עמודת הקביעה.' : 'החלק מדבר על משהו אחר. בדקו על מי או על מה הוא מדבר.';
-    return col.kind === 'var' ? 'הפסוק השלם הוא התוצאה, ולכן הוא שייך לעמודת הקביעה.' : 'זה הפסוק של דובר אחר.';
+    if (chip.kind === 'part') return col.kind === 'var' ? 'החלק מדבר על משהו אחר. בדקו על מי או על מה הוא מדבר.' : 'חלק מתאר זהות או עובדה, ולכן הוא שייך לעמודת המשתנה שלו ולא לעמודות הפסוק והתנאי.';
+    if (chip.kind === 'sent') {
+      if (col.kind === 'sent') return 'זה הפסוק של דובר אחר.';
+      return col.kind === 'cond' ? 'זה רק הפסוק. תנאי העקביות הוא פסוק "אם ורק אם" בין המשתנה של הדובר לפסוק, והוא שייך לעמודת התנאי.' : 'זה הפסוק השלם, ולכן הוא שייך לעמודת "הפסוק".';
+    }
+    if (col.kind === 'cond') return 'זה התנאי של דובר אחר.';
+    return col.kind === 'sent' ? 'זה התנאי כולו, עם "אם ורק אם", ולא רק הפסוק. הוא שייך לעמודת התנאי.' : 'זה תנאי העקביות כולו, ולכן הוא שייך לעמודת "תנאי העקביות".';
   }
   function tryPlace(chipId, colId) {
     const chip = CHIPS.find(c => c.id === chipId), col = COLS.find(c => c.id === colId);
@@ -615,22 +625,25 @@ export function mountKnightsPanel(container, level, api) {
   const wrapTable = (cap, html, cls = '') => `<div class="kn-tablewrap" role="region" aria-label="${esc(cap)} (אפשר לגלול הצידה)" tabindex="0"><table class="kn-table ${cls}"><caption class="kn-sr-only">${esc(cap)}</caption>${html}</table></div><p class="kn-scrollhint" data-scrollhint>הטבלה רחבה מהמסך: אפשר לגלול אותה הצידה.</p>`;
   const detKey = (n, i) => `${n}:${i}`;
   const cellState = v => (v === null ? 'ריק' : tv(v));
+  const colOf = id => COLS.find(c => c.id === id);
+  const sentName = i => colOf(`s:${i}`).name;
+  const condName = i => colOf(`c:${i}`).name;
 
   function body3() {
     const assume = heList(ex.vars.map(v => `ל־${ltr(v)}`));
-    const eqs = heList(ex.sentences.map((s, i) => ltr(`${sLabel(i)} = ${sentenceText(s)}`)), 'ו־');
+    const eqs = heList(ex.sentences.map(s => ltr(sentenceText(s))), 'ו־');
     const method = nS > 1
-      ? `בכל שורה מניחים ערך ${assume} (${nV} משתנים = ${R.length} שורות), ומחשבים את שתי הקביעות: ${eqs}.`
-      : `בכל שורה מניחים ערך ${assume}, ומחשבים ${eqs} לפי ההנחה.`;
+      ? `בכל שורה מניחים ערך ${assume} (${nV} משתנים = ${R.length} שורות), ומחשבים את שני הפסוקים: ${eqs}.`
+      : `בכל שורה מניחים ערך ${assume}, ומחשבים את הפסוק ${eqs} לפי ההנחה.`;
     const head = `<thead>
       <tr><th rowspan="2" scope="col">שורה</th><th colspan="${nV}" scope="colgroup">מניחים</th><th colspan="${nS}" scope="colgroup">מחשבים</th></tr>
-      <tr>${ex.vars.map(varHead).join('')}${ex.sentences.map((s, i) => `<th scope="col">${esc(s.col)}<span class="kn-th-sub kn-th-formula">${esc(`${sLabel(i)} = ${sentenceText(s)}`)}</span></th>`).join('')}</tr>
+      <tr>${ex.vars.map(varHead).join('')}${ex.sentences.map((s, i) => `<th scope="col">${esc(sentName(i))}<span class="kn-th-sub kn-th-formula">${esc(sentenceText(s))}</span></th>`).join('')}</tr>
     </thead>`;
     const bodyRows = R.map(r => `<tr data-row="${r.n}"><th scope="row">${r.n}</th>${ex.vars.map(v => valCell(r.vals[v])).join('')}${ex.sentences.map((s, i) =>
       `<td><button type="button" class="kn-cell" data-act="det" data-row="${r.n}" data-i="${i}"></button></td>`).join('')}</tr>`).join('');
-    return `<p class="kn-lead">לכל שורה בטבלה (כל שילוב אפשרי של אמת ושקר במשתנים) ${nS > 1 ? 'קבעו את ערכי הפסוקים שבניתם בשלב 1, ורשמו אותם בעמודות הקביעה של הדוברים' : 'קבעו את ערך הפסוק שבניתם בשלב 1, ורשמו אותו בעמודת הקביעה'}. לחיצה על תא מחליפה בין ריק, אמת ושקר.</p>
+    return `<p class="kn-lead">לכל שורה בטבלה (כל שילוב אפשרי של אמת ושקר במשתנים) ${nS > 1 ? 'חשבו את ערכי הפסוקים, ורשמו אותם בעמודות "הפסוק" של הדוברים' : 'חשבו את ערך הפסוק, ורשמו אותו בעמודת "הפסוק"'}. בשלב הזה עדיין לא בודקים את תנאי העקביות. לחיצה על תא מחליפה בין ריק, אמת ושקר.</p>
       <p class="kn-method"><b>השיטה:</b> ${method}</p>
-      ${wrapTable('טבלת הקביעות', head + `<tbody>${bodyRows}</tbody>`)}
+      ${wrapTable('טבלת ערכי הפסוק', head + `<tbody>${bodyRows}</tbody>`)}
       <div class="kn-actions"><button type="button" class="kn-check" data-act="check3">בדיקה</button>${hintBlock(3)}</div>
       <div class="kn-fb" data-fb="3" role="status" aria-live="polite"></div>
       ${hintsHost(3)}`;
@@ -642,7 +655,7 @@ export function mountKnightsPanel(container, level, api) {
     btn.className = `kn-cell ${v === null ? 'is-empty' : v ? 'is-t' : 'is-f'}${locked ? ' is-locked' : ''}${bad ? ' is-bad' : ''}${need ? ' is-need' : ''}`;
     btn.disabled = locked;
     btn.innerHTML = `${v === null ? '?' : tv(v)}${bad ? '<span class="kn-bang" aria-hidden="true">!</span>' : ''}`;
-    btn.setAttribute('aria-label', `שורה ${n}, ${ex.sentences[i].col}: ${cellState(v)}${bad ? '. שגוי' : ''}${need ? '. חסר ערך' : ''}${locked ? '. נכון' : ''}`);
+    btn.setAttribute('aria-label', `שורה ${n}, ${sentName(i)}: ${cellState(v)}${bad ? '. שגוי' : ''}${need ? '. חסר ערך' : ''}${locked ? '. נכון' : ''}`);
   }
   function refreshAllDet() { qa('.kn-cell').forEach(refreshDetCell); }
   function cycleDet(btn) {
@@ -653,7 +666,7 @@ export function mountKnightsPanel(container, level, api) {
     delete S.detBad[key]; delete S.detNeed[key];
     showFb(3, [], true);
     refreshDetCell(btn);
-    announce(`שורה ${n}, ${ex.sentences[i].col}: ${cellState(S.dets[n][i])}`);
+    announce(`שורה ${n}, ${sentName(i)}: ${cellState(S.dets[n][i])}`);
   }
   function check3() {
     const bad = checkDeterminations(ex, S.dets);
@@ -667,7 +680,7 @@ export function mountKnightsPanel(container, level, api) {
       else { S.detBad[key] = true; badRows.add(r.n); }
     }));
     refreshAllDet();
-    if (!bad.length) { showFb(3, [{ k: 'ok', html: 'כל הקביעות נכונות.' }]); completeStage(3); return; }
+    if (!bad.length) { showFb(3, [{ k: 'ok', html: nS > 1 ? 'כל ערכי הפסוקים נכונים.' : 'כל ערכי הפסוק נכונים.' }]); completeStage(3); return; }
     const lines = [];
     if (badRows.size) lines.push({ k: 'bad', html: `${badRows.size === 1 ? 'בשורה המסומנת' : 'בשורות המסומנות'} (${[...badRows].join(', ')}) יש ערך שגוי. חשבו שוב את ${nS > 1 ? 'הפסוקים' : 'הפסוק'} לפי הערכים שהונחו באותה שורה.` });
     if (empties) lines.push({ k: badRows.size ? 'bad' : 'note', html: 'יש למלא את כל השורות.' });
@@ -676,17 +689,20 @@ export function mountKnightsPanel(container, level, api) {
     if (badRows.size || (empties && COUNT_INCOMPLETE_AS_WRONG)) wrong();
   }
 
+  // ---- שלב 4: תנאי העקביות (אם ורק אם) בכל שורה. עם דובר אחד התא של התנאי הוא גם סימון השורה (✓ = עקבית); עם שניים יש גם עמודת "עקבית?"
   function body4() {
+    const many = nS > 1;
     const head = `<thead>
-      <tr><th rowspan="2" scope="col">שורה</th><th colspan="${nV}" scope="colgroup">מניחים</th>${ex.sentences.map((_, i) => `<th colspan="2" scope="colgroup">בדיקת ${esc(sName(i))}</th>`).join('')}<th rowspan="2" scope="col">מתאים?</th></tr>
-      <tr>${ex.vars.map(varHead).join('')}${ex.sentences.map((s) => `<th scope="col">אמור (זהות)<span class="kn-th-sub">${esc(s.speaker)}</span></th><th scope="col">בפועל<span class="kn-th-sub">${esc(`${nS > 1 ? `S${s.speaker}` : 'S'}`)}</span></th>`).join('')}</tr>
+      <tr><th rowspan="2" scope="col">שורה</th><th colspan="${nV}" scope="colgroup">מניחים</th>${ex.sentences.map((_, i) => `<th colspan="2" scope="colgroup">${esc(many ? `בדיקת ${sName(i)}` : 'בדיקה')}</th>`).join('')}${many ? '<th rowspan="2" scope="col" class="kn-th-mark">עקבית?</th>' : ''}</tr>
+      <tr>${ex.vars.map(varHead).join('')}${ex.sentences.map((s, i) => `<th scope="col">הפסוק<span class="kn-th-sub kn-th-formula">${esc(sentenceText(s))}</span></th><th scope="col">תנאי<span class="kn-th-sub kn-th-formula">${esc(conditionText(ex, i))}</span></th>`).join('')}</tr>
     </thead>`;
-    const bodyRows = T.map(r => `<tr data-row="${r.n}"><th scope="row">${r.n}</th>${ex.vars.map(v => valCell(r.vals[v])).join('')}${ex.sentences.map((_, i) => valCell(r.said[i]) + valCell(r.S[i])).join('')}
-      <td class="kn-markcell"><button type="button" class="kn-mark" data-act="mark" data-row="${r.n}"></button></td></tr>`).join('');
-    return `<p class="kn-lead">בדקו כל שורה בנפרד: השורה עקבית (✓) כשהערך שב"אמור (זהות)" שווה לערך שב"בפועל" (הקביעה), ${nS > 1 ? 'בשני הדוברים בו־זמנית, ואחרת היא נפסלת (✗)' : 'ואחרת היא נפסלת (✗)'}. לחיצה על התא מחליפה בין ריק, ✓ ו־✗.</p>
-      <p class="kn-rule"><b>חוק העקביות:</b> דובר אמין חייב לומר אמת, דובר נוכל חייב לומר שקר.</p>
+    const bodyRows = T.map(r => `<tr data-row="${r.n}"><th scope="row">${r.n}</th>${ex.vars.map(v => valCell(r.vals[v])).join('')}${ex.sentences.map((_, i) =>
+      `${valCell(r.S[i])}<td class="kn-markcell"><button type="button" class="kn-mark" data-act="cond" data-row="${r.n}" data-i="${i}"></button></td>`).join('')}${many
+        ? `<td class="kn-markcell"><button type="button" class="kn-mark" data-act="mark" data-row="${r.n}"></button></td>` : ''}</tr>`).join('');
+    return `<p class="kn-lead">בכל שורה בדקו את תנאי העקביות של ${many ? 'כל דובר' : 'הדובר'}: ${ltr('⟺')} אמת כשערך המשתנה של הדובר (בעמודות "מניחים") שווה לערך הפסוק, ושקר כשהם שונים. לחיצה על תא מחליפה בין ריק, ✓ (אמת) ו־✗ (שקר).${many ? ' בעמודה "עקבית?" סמנו ✓ רק בשורה ששני התנאים בה ✓.' : ' השורה עקבית כשהתנאי שלה ✓.'}</p>
+      <p class="kn-rule"><b>תנאי העקביות:</b> "הדובר צדיק" ${ltr('⟺')} "מה שהוא אמר נכון". צדיק אומר תמיד אמת, נוכל אומר תמיד שקר.</p>
       ${ex.rule ? `<p class="kn-rule"><b>כלל הבדיקה:</b> ${ruleHtml(ex.rule)}</p>` : ''}
-      ${wrapTable('טבלת בדיקת העקביות', head + `<tbody>${bodyRows}</tbody>`, 'kn-t4')}
+      ${wrapTable('טבלת בדיקת תנאי העקביות', head + `<tbody>${bodyRows}</tbody>`, 'kn-t4')}
       <div class="kn-actions"><button type="button" class="kn-check" data-act="check4">בדיקה</button>${hintBlock(4)}</div>
       <div class="kn-fb" data-fb="4" role="status" aria-live="polite"></div>
       ${hintsHost(4)}
@@ -694,6 +710,29 @@ export function mountKnightsPanel(container, level, api) {
   }
   const markGlyph = v => (v === null ? '?' : v ? '✓' : '✗');
   const markWord = v => (v === null ? 'ריק' : v ? 'עקבית' : 'לא עקבית');
+  const condWord = v => (v === null ? 'ריק' : v ? 'אמת, ✓' : 'שקר, ✗');
+  const rowsWord = (list) => `${list.length === 1 ? 'בשורה המסומנת' : 'בשורות המסומנות'} (${list.join(', ')})`;
+  function refreshCond(btn) {
+    const n = +btn.dataset.row, i = +btn.dataset.i, key = detKey(n, i);
+    const v = S.conds[n][i];
+    const locked = !!S.condLock[key], bad = !!S.condBad[key], need = !!S.condNeed[key];
+    const sol = S.solved && nS === 1 && solution.n === n;
+    btn.className = `kn-mark ${v === null ? 'is-empty' : v ? 'is-t' : 'is-f'}${locked && !S.solved ? ' is-locked' : ''}${bad ? ' is-bad' : ''}${need ? ' is-need' : ''}${sol ? ' is-solution' : ''}`;
+    btn.disabled = locked;
+    btn.innerHTML = `${markGlyph(v)}${bad ? '<span class="kn-bang" aria-hidden="true">!</span>' : ''}`;
+    btn.setAttribute('aria-label', `שורה ${n}, ${condName(i)}: ${condWord(v)}${bad ? '. שגוי' : ''}${need ? '. חסר סימון' : ''}${locked ? '. נכון' : ''}`);
+  }
+  function refreshAllConds() { qa('.kn-mark[data-act="cond"]').forEach(refreshCond); }
+  function cycleCond(btn) {
+    const n = +btn.dataset.row, i = +btn.dataset.i, key = detKey(n, i);
+    if (S.condLock[key] || S.solved) return;
+    const cur = S.conds[n][i];
+    S.conds[n][i] = cur === null ? true : cur === true ? false : null;
+    delete S.condBad[key]; delete S.condNeed[key];
+    showFb(4, [], true);
+    refreshCond(btn);
+    announce(`שורה ${n}, ${condName(i)}: ${condWord(S.conds[n][i])}`);
+  }
   function refreshMark(btn) {
     const n = +btn.dataset.row;
     const v = S.marks[n];
@@ -702,9 +741,9 @@ export function mountKnightsPanel(container, level, api) {
     btn.className = `kn-mark ${v === null ? 'is-empty' : v ? 'is-t' : 'is-f'}${locked && !S.solved ? ' is-locked' : ''}${bad ? ' is-bad' : ''}${need ? ' is-need' : ''}${sol ? ' is-solution' : ''}`;
     btn.disabled = locked;
     btn.innerHTML = `${markGlyph(v)}${bad ? '<span class="kn-bang" aria-hidden="true">!</span>' : ''}`;
-    btn.setAttribute('aria-label', `שורה ${n}, מתאים: ${markWord(v)}${bad ? '. שגוי' : ''}${need ? '. חסר סימון' : ''}${locked ? '. נכון' : ''}`);
+    btn.setAttribute('aria-label', `שורה ${n}, עקבית: ${markWord(v)}${bad ? '. שגוי' : ''}${need ? '. חסר סימון' : ''}${locked ? '. נכון' : ''}`);
   }
-  function refreshAllMarks() { qa('.kn-mark').forEach(refreshMark); }
+  function refreshAllMarks() { qa('.kn-mark[data-act="mark"]').forEach(refreshMark); }
   function cycleMark(btn) {
     const n = +btn.dataset.row;
     if (S.markLock[n] || S.solved) return;
@@ -716,28 +755,42 @@ export function mountKnightsPanel(container, level, api) {
     announce(`שורה ${n}: ${markWord(S.marks[n])}`);
   }
   function check4() {
-    const bad = checkConsistency(ex, S.marks);
-    const map = new Map(bad.map(b => [b.row, b]));
-    let empties = 0; const badRows = [];
-    R.forEach(r => {
-      const b = map.get(r.n);
-      delete S.markBad[r.n]; delete S.markNeed[r.n];
-      if (!b) S.markLock[r.n] = true;
-      else if (b.empty) { S.markNeed[r.n] = true; empties++; }
-      else { S.markBad[r.n] = true; badRows.push(r.n); }
-    });
-    if (!bad.length) { finish(); return; }
-    refreshAllMarks();
+    const badC = checkConditions(ex, S.conds);
+    const mapC = new Map(badC.map(b => [detKey(b.row, b.sentence), b]));
+    let empties = 0; const condRows = new Set(); const markRows = [];
+    R.forEach(r => ex.sentences.forEach((_, i) => {
+      const key = detKey(r.n, i), b = mapC.get(key);
+      delete S.condBad[key]; delete S.condNeed[key];
+      if (!b) S.condLock[key] = true;
+      else if (b.empty) { S.condNeed[key] = true; empties++; }
+      else { S.condBad[key] = true; condRows.add(r.n); }
+    }));
+    let badM = [];
+    if (nS > 1) {
+      badM = checkConsistency(ex, S.marks);
+      const mapM = new Map(badM.map(b => [b.row, b]));
+      R.forEach(r => {
+        const b = mapM.get(r.n);
+        delete S.markBad[r.n]; delete S.markNeed[r.n];
+        if (!b) S.markLock[r.n] = true;
+        else if (b.empty) { S.markNeed[r.n] = true; empties++; }
+        else { S.markBad[r.n] = true; markRows.push(r.n); }
+      });
+    }
+    if (!badC.length && !badM.length) { finish(); return; }
+    refreshAllConds(); refreshAllMarks();
     const lines = [];
-    if (badRows.length) lines.push({ k: 'bad', html: `${badRows.length === 1 ? 'בשורה המסומנת' : 'בשורות המסומנות'} (${badRows.join(', ')}) הבדיקה שגויה. השוו בין "אמור" ל"בפועל" ${nS > 1 ? 'אצל כל אחד מהדוברים' : 'באותה שורה'}.` });
-    if (empties) lines.push({ k: badRows.length ? 'bad' : 'note', html: 'יש לסמן ✓ או ✗ בכל שורה.' });
+    if (condRows.size) lines.push({ k: 'bad', html: `${rowsWord([...condRows])} תנאי העקביות שגוי. השוו בין ערך המשתנה של הדובר (בעמודות "מניחים") לבין ערך הפסוק: ${ltr('⟺')} אמת כששניהם שווים ושקר כשהם שונים.` });
+    if (markRows.length) lines.push({ k: 'bad', html: `${rowsWord(markRows)} הסימון בעמודה "עקבית?" שגוי. שורה עקבית (✓) רק אם שני התנאים שלה ✓.` });
+    if (empties) lines.push({ k: (condRows.size || markRows.length) ? 'bad' : 'note', html: 'יש למלא את כל התאים.' });
     showFb(4, lines);
     announce(lines.map(l => l.html.replace(/<[^>]+>/g, '')).join(' '));
-    if (badRows.length || (empties && COUNT_INCOMPLETE_AS_WRONG)) wrong();
+    if (condRows.size || markRows.length || (empties && COUNT_INCOMPLETE_AS_WRONG)) wrong();
   }
   function finish() {
     if (S.solved) return;
     S.solved = true;
+    refreshAllConds();
     refreshAllMarks();
     const row = q(`.kn-table tr[data-row="${solution.n}"]`, stageEl(4));
     if (row) row.classList.add('is-solution');
@@ -804,6 +857,7 @@ export function mountKnightsPanel(container, level, api) {
     }
     else if (act === 'det') cycleDet(el);
     else if (act === 'check3') check3();
+    else if (act === 'cond') cycleCond(el);
     else if (act === 'mark') cycleMark(el);
     else if (act === 'check4') check4();
     else if (act === 'hint') { if (el.getAttribute('aria-disabled') !== 'true') revealHint(+el.dataset.stage); }
