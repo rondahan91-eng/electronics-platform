@@ -79,6 +79,7 @@ function routeAction(action, payload) {
     switch (action) {
       case 'authenticateUser': return authenticateUser(payload.username, payload.password);
       case 'fetchClassProgress': return fetchClassProgress(payload.topicId);
+      case 'fetchClassLevels': return fetchClassLevels();
       case 'createNewStudent': return createNewStudent(payload.username, payload.password, payload.displayName, payload.grade);
       case 'updateStudentPassword': return updateStudentPassword(payload.studentId, payload.newPassword);
       case 'saveLevelResult': return saveLevelResult(payload.studentId, payload.topicId, payload.levelId, payload.solved, payload.timeSeconds, payload.disqualified);
@@ -221,6 +222,22 @@ function fetchClassProgress(topicId) {
   const users = sheetToObjects(getSheet(SHEET_USERS)).filter(u => u.role === 'student');
   const levelRows = sheetToObjects(getSheet(SHEET_LEVELS)).filter(r => r.topicId === topicId);
   return users.map(u => summarizeStudent(u, levelRows));
+}
+
+// כל שורות השלבים של כל התלמידים בקריאה אחת (קריאה בלבד, ללא נעילה): מזין את "מעקב לפי שכבה ופרק" בלוח הבקרה.
+// בלי הפעולה הזו הלוח עובד עדיין, אבל מחשב התקדמות בפרקים עם כמה תת-נושאים של אותו topic בקירוב (לפי השלב הגבוה ביותר).
+function fetchClassLevels() {
+  const students = {};
+  sheetToObjects(getSheet(SHEET_USERS)).filter(u => u.role === 'student').forEach(u => { students[u.studentId] = true; });
+  return sheetToObjects(getSheet(SHEET_LEVELS)).filter(r => students[r.studentId]).map(r => ({
+    studentId: r.studentId,
+    topicId: r.topicId,
+    levelId: Number(r.levelId),
+    solved: !!r.solved,
+    attempts: Number(r.attempts) || 0,
+    dq: Number(r.disqualifications) || 0,
+    timeSeconds: (typeof r.timeSeconds === 'number') ? r.timeSeconds : null,
+  }));
 }
 
 function fetchMyProgress(studentId) {

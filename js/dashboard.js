@@ -3,7 +3,7 @@
 // עיון ותרגול חופשי בתוכן, ייבוא תלמידים מ-Excel וניהול סיסמאות.
 // ==========================================================================
 import {
-  fetchClassProgress, fetchGrades, fetchTopicLevelStats, fetchReports, toggleReportOpen,
+  fetchClassProgress, fetchClassLevels, fetchGrades, fetchTopicLevelStats, fetchReports, toggleReportOpen,
   createNewStudent, updateStudentPassword, changeMyPassword, revealChapter, hideChapter,
 } from './api.js';
 import { TOPICS, allGrades } from './curriculum.js';
@@ -36,6 +36,7 @@ function practicableChapters() {
         topicId,
         subs: c.item.subs.filter(sb => sb.topicId === topicId),
         item: c.item,
+        sec: c.sec,
       });
     }
   }
@@ -61,6 +62,10 @@ export async function mountDashboard(app, session, onLogout) {
   const chapters = practicableChapters();
   const state = {
     tab: 'track',
+    trackView: 'grades',           // 'grades' = סקירה לפי שכבה ופרק, 'chapter' = פירוט פרק בודד
+    mxSort: 'name',                // 'name' | 'progress'
+    mxShowUnrevealed: false,       // להציג גם פרקים שעוד לא נחשפו לשכבה
+    matrix: null,                  // נתוני ההתקדמות לפי פרק, נטענים רק כשהתצוגה פתוחה
     gradeFilter: 'all',
     chapterKey: chapters[0] ? chapters[0].key : null,
     students: [], grades: [], levelStats: [], reports: [],
@@ -93,11 +98,79 @@ export async function mountDashboard(app, session, onLogout) {
       state.levelStats = state.levelStats || [];
       state.reports = state.reports || [];
     }
+    state.matrix = null;
+    if (state.tab === 'track' && state.trackView === 'grades') await loadMatrix();
     render();
   }
 
-  // ------------------------------------------------------------ טאב: מעקב כיתתי
-  function renderTrackTab() {
+  // ------------------------------------------------------------ נתוני "מעקב לפי שכבה ופרק"
+  // קריאה אחת לכל שורות השלבים של כל התלמידים (fetchClassLevels). שרת ישן שעוד לא עודכן בפעולה הזו מחזיר "פעולה לא מוכרת":
+  // אז נופלים חזרה לקריאה אחת לכל נושא (fetchClassProgress), שמחזירה רק את השלב הגבוה ביותר שנפתר, ומחשבים התקדמות בקירוב.
+  // הקירוב מדויק לפרק שיש בו חלון שלבים אחד שמתחיל ב-1, ומשוער בפרק עם כמה תת-נושאים של אותו topic (מסומן ב-≈).
+  async function loadMatrix() {
+    try {
+      const rows = await fetchClassLevels();
+      const byKey = new Map();
+      rows.forEach(r => {
+        const k = `${r.studentId}|${r.topicId}`;
+        if (!byKey.has(k)) byKey.set(k, []);
+        byKey.get(k).push(r);
+      });
+      state.matrix = { mode: 'exact', byKey };
+    } catch (e) {
+      if (!/לא מוכרת|unknown action/i.test(String(e && e.message))) {
+        state.matrix = null;
+        toast('שגיאה בטעינת ההתקדמות לפי פרק: ' + e.message, true);
+        return;
+      }
+      try {
+        const topicIds = [...new Set(chapters.map(c => c.topicId))];
+        const lists = await Promise.all(topicIds.map(id => fetchClassProgress(id).then(list => [id, list])));
+        const highest = new Map();
+        lists.forEach(([id, list]) => list.forEach(s => highest.set(`${s.studentId}|${id}`, s.highestLevel || 0)));
+        state.matrix = { mode: 'approx', highest };
+      } catch (e2) {
+        state.matrix = null;
+        toast('שגיאה בטעינת ההתקדמות לפי פרק: ' + e2.message, true);
+      }
+    }
+  }
+
+  /** התקדמות תלמיד/ה בפרק (entry מ-practicableChapters): { total, done, started, approx }. */
+  function chapterProgress(entry, studentId) {
+    const total = entry.subs.reduce((a, sb) => a + sb.total, 0);
+    const m = state.matrix;
+    if (!m) return { total, done: 0, started: false, approx: false };
+    const k = `${studentId}|${entry.topicId}`;
+    if (m.mode === 'exact') {
+      const rows = m.byKey.get(k) || [];
+      let done = 0, started = false;
+      entry.subs.forEach(sb => rows.forEach(r => {
+        if (r.levelId < sb.levelStart || r.levelId > sb.levelEnd) return;
+        if (r.solved) done++;
+        if (r.solved || r.attempts > 0) started = true;
+      }));
+      return { total, done, started, approx: false };
+    }
+    const hi = m.highest.get(k) || 0;
+    const done = entry.subs.reduce((a, sb) => a + Math.max(0, Math.min(sb.total, hi - sb.levelStart + 1)), 0);
+    return { total, done, started: done > 0, approx: entry.subs.length > 1 };
+  }
+
+  function gradeSections() {
+    const known = allGrades();
+    const extra = [...new Set(state.students.map(s => s.grade).filter(g => g && !known.includes(g)))];
+    return [...known, ...extra].filter(g => state.gradeFilter === 'all' || state.gradeFilter === g);
+  }
+  function chaptersForGrade(grade) {
+    const g = state.grades.find(x => x.grade === grade);
+    const rev = new Set(g ? g.revealed : []);
+    return chapters.filter(c => state.mxShowUnrevealed || rev.has(c.key.split('|')[0]))
+      .map(c => ({ entry: c, revealed: rev.has(c.key.split('|')[0]) }));
+  }
+
+  // ------------------------------------------------------------ טאב: מעקב כיתתי - פירוט פרק בודד
+  function renderChapterView() {
     const topic = currentTopic();
     const filtered = state.gradeFilter === 'all' ? state.students : state.students.filter(s => s.grade === state.gradeFilter);
 
@@ -186,6 +259,118 @@ export async function mountDashboard(app, session, onLogout) {
           ${challengeHtml}
         </div>
       </div>`;
+  }
+
+  // ------------------------------------------------------------ טאב: מעקב כיתתי - סקירה לפי שכבה ופרק
+  function renderTrackTab() {
+    const viewBtn = (key, label) => `<button type="button" class="seg-btn${state.trackView === key ? ' active' : ''}" data-trackview="${key}" role="tab" aria-selected="${state.trackView === key}">${label}</button>`;
+    return `<div class="mx-viewbar">
+        <div class="seg" role="tablist" aria-label="תצוגת מעקב">${viewBtn('grades', 'לפי שכבה ופרק')}${viewBtn('chapter', 'פירוט פרק')}</div>
+        ${state.trackView === 'grades' ? gradesToolsHtml() : ''}
+      </div>
+      ${state.trackView === 'grades' ? renderGradesOverview() : renderChapterView()}`;
+  }
+
+  function gradesToolsHtml() {
+    return `<div class="mx-tools">
+        <label class="mx-tool">מיון <select id="mx-sort">
+          <option value="name"${state.mxSort === 'name' ? ' selected' : ''}>לפי שם</option>
+          <option value="progress"${state.mxSort === 'progress' ? ' selected' : ''}>לפי התקדמות</option>
+        </select></label>
+        <label class="mx-tool"><input type="checkbox" id="mx-unrevealed"${state.mxShowUnrevealed ? ' checked' : ''}> להציג גם פרקים שלא נחשפו</label>
+      </div>`;
+  }
+
+  function renderGradesOverview() {
+    if (!state.matrix) {
+      return `<div class="panel glass"><p class="center-msg" style="margin:0;">לא ניתן היה לטעון את ההתקדמות לפי פרק. אפשר לנסות שוב בלחיצה על "נושאי הלימוד" בתפריט.</p></div>`;
+    }
+    const sections = gradeSections();
+    const anyApprox = state.matrix.mode === 'approx' && sections.some(g => chaptersForGrade(g).some(c => c.entry.subs.length > 1));
+    const note = anyApprox
+      ? `<p class="form-note mx-note">פרקים המסומנים ≈ כוללים כמה תת-נושאים של אותו נושא, והתקדמות בהם משוערת לפי השלב הגבוה ביותר שנפתר. לנתונים מדויקים צריך לעדכן את סקריפט השרת (backend/Code.gs).</p>`
+      : '';
+    return sections.map(renderGradeSection).join('') + note;
+  }
+
+  function renderGradeSection(grade) {
+    const label = grade === '—' ? 'ללא שכבה' : `כיתה ${escapeHtml(grade)}`;
+    const students = state.students.filter(s => s.grade === grade);
+    const cols = chaptersForGrade(grade);
+    const now = Date.now();
+    const active = students.filter(s => s.lastActiveDate && (now - new Date(s.lastActiveDate).getTime()) <= 7 * 86400000).length;
+
+    // התקדמות כל תלמיד/ה: לכל פרק מוצג, ובסך הכל (שלבים שנפתרו מתוך כל שלבי הפרקים המוצגים)
+    const data = students.map(s => {
+      const cells = cols.map(c => chapterProgress(c.entry, s.studentId));
+      const done = cells.reduce((a, p) => a + p.done, 0), total = cells.reduce((a, p) => a + p.total, 0);
+      return { s, cells, done, total, pct: total ? done / total : 0 };
+    });
+    const sorted = data.slice().sort((a, b) => state.mxSort === 'progress'
+      ? (b.pct - a.pct) || (a.s.displayName || a.s.username).localeCompare(b.s.displayName || b.s.username, 'he')
+      : (a.s.displayName || a.s.username).localeCompare(b.s.displayName || b.s.username, 'he'));
+    const avgPct = data.length ? Math.round(data.reduce((a, r) => a + r.pct, 0) / data.length * 100) : 0;
+
+    // שורת קבוצות מעל הפרקים: אותו מספר פרק קיים בכמה חלקים של התוכנית (יסודות תורת החשמל / מערכות ספרתיות)
+    const groups = [];
+    cols.forEach(({ entry }) => {
+      const last = groups[groups.length - 1];
+      if (last && last.key === entry.sec.key) last.n++; else groups.push({ key: entry.sec.key, label: entry.sec.part.split(' · ')[0], n: 1 });
+    });
+    const groupRow = groups.map(g => `<th class="mx-group" colspan="${g.n}" scope="colgroup">${escapeHtml(g.label)}</th>`).join('');
+    const head = cols.map(({ entry, revealed }, ci) => {
+      const finished = data.filter(r => r.cells[ci].total && r.cells[ci].done >= r.cells[ci].total).length;
+      const n = entry.item.n;
+      const full = `${entry.label}${revealed ? '' : ' (לא נחשף לשכבה)'}`;
+      return `<th class="mx-ch${revealed ? '' : ' mx-dim'}" scope="col">
+          <button type="button" class="mx-colhead" data-drill="${entry.key}" data-grade="${escapeHtml(grade)}" title="${escapeHtml(full)}. לחיצה: פירוט הפרק" aria-label="${escapeHtml(full)}. לפירוט הפרק">
+            <span class="mx-ch-n">פרק ${escapeHtml(String(n))}</span><span class="mx-ch-t">${escapeHtml(entry.item.title)}</span>
+          </button>
+          <span class="mx-ch-sum" title="תלמידים שסיימו את כל שלבי הפרק">${finished}/${data.length} סיימו</span>
+        </th>`;
+    }).join('');
+
+    const body = sorted.length
+      ? sorted.map(r => `<tr>
+          <td class="mx-name"><div class="student-cell-name">${escapeHtml(r.s.displayName || r.s.username)}</div><div class="student-cell-user">${escapeHtml(r.s.username)}</div></td>
+          ${r.cells.map((p, ci) => cellHtml(cols[ci], grade, r.s, p)).join('')}
+          <td class="mx-total"><span class="mx-total-pct">${Math.round(r.pct * 100)}%</span><span class="mx-total-sub">${r.done}/${r.total}</span></td>
+        </tr>`).join('')
+      : `<tr><td colspan="${cols.length + 2}" class="center-msg">אין תלמידים רשומים בשכבה הזו</td></tr>`;
+
+    const table = cols.length
+      ? `<div class="table-scroll mx-scroll"><table class="mx-table">
+          <caption class="mx-sr">התקדמות התלמידים (${label}) לפי פרק</caption>
+          <thead>
+            <tr class="mx-head1"><th class="mx-name" rowspan="2" scope="col">תלמיד/ה</th>${groupRow}<th class="mx-total" rowspan="2" scope="col">סך הכל</th></tr>
+            <tr class="mx-head2">${head}</tr>
+          </thead>
+          <tbody>${body}</tbody></table></div>`
+      : `<p class="center-msg" style="margin:0;padding:22px 18px;">עוד לא נחשפו לשכבה הזו פרקים עם תרגול. אפשר לחשוף בלשונית "תוכנית לימודים", או לסמן למעלה "להציג גם פרקים שלא נחשפו".</p>`;
+
+    return `<section class="panel glass mx-grade" data-grade="${escapeHtml(grade)}" aria-label="${label}">
+        <div class="mx-grade-head">
+          <h3>${label}</h3>
+          <div class="mx-grade-stats">
+            <span><b>${students.length}</b> תלמידים</span>
+            <span><b>${active}</b> פעילים בשבוע האחרון</span>
+            <span><b>${avgPct}%</b> התקדמות ממוצעת בפרקים המוצגים</span>
+          </div>
+        </div>
+        ${table}
+      </section>`;
+  }
+
+  function cellHtml(col, grade, s, p) {
+    const { entry, revealed } = col;
+    const full = p.total > 0 && p.done >= p.total;
+    const cls = full ? 'done' : p.done > 0 ? 'prog' : p.started ? 'start' : 'none';
+    const pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+    const text = (p.done > 0 || p.started) ? `${p.approx ? '≈' : ''}${full ? '✓ ' : ''}${p.done}/${p.total}` : '—';
+    const word = full ? 'הושלם' : p.done > 0 ? 'בתהליך' : p.started ? 'התחיל/ה, עוד לא פתר/ה' : 'לא התחיל/ה';
+    const tip = `${s.displayName || s.username}, ${entry.label}: ${p.done} מתוך ${p.total} שלבים נפתרו (${word})${p.approx ? ', משוער' : ''}`;
+    return `<td class="mx-cell ${cls}${revealed ? '' : ' mx-dim'}"><button type="button" class="mx-cellbtn" data-drill="${entry.key}" data-grade="${escapeHtml(grade)}" title="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">
+        <span class="mx-bar"><i style="width:${pct}%"></i></span><span class="mx-cell-text">${text}</span></button></td>`;
   }
 
   // ------------------------------------------------------------ טאב: דיווחי תקלות
@@ -513,7 +698,10 @@ export async function mountDashboard(app, session, onLogout) {
     });
 
     app.querySelectorAll('.dash-tab').forEach(btn => {
-      btn.addEventListener('click', () => { state.tab = btn.dataset.tab; render(); });
+      btn.addEventListener('click', () => {
+        state.tab = btn.dataset.tab;
+        if (state.tab === 'track' && state.trackView === 'grades' && !state.matrix) refresh(); else render();
+      });
     });
 
     if (state.tab === 'track') wireTrackTab();
@@ -525,9 +713,30 @@ export async function mountDashboard(app, session, onLogout) {
   }
 
   function wireTrackTab() {
-    document.getElementById('track-chapter').addEventListener('change', (e) => {
+    app.querySelectorAll('[data-trackview]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (state.trackView === btn.dataset.trackview) return;
+        state.trackView = btn.dataset.trackview;
+        if (state.trackView === 'grades' && !state.matrix) refresh(); else render();
+      });
+    });
+    const chapterSel = document.getElementById('track-chapter');
+    if (chapterSel) chapterSel.addEventListener('change', (e) => {
       state.chapterKey = e.target.value;
       refresh();
+    });
+    const sortSel = document.getElementById('mx-sort');
+    if (sortSel) sortSel.addEventListener('change', (e) => { state.mxSort = e.target.value; render(); });
+    const unrev = document.getElementById('mx-unrevealed');
+    if (unrev) unrev.addEventListener('change', (e) => { state.mxShowUnrevealed = e.target.checked; render(); });
+    // לחיצה על כותרת פרק או על תא עוברת לפירוט הפרק, בשכבה שנלחצה
+    app.querySelectorAll('[data-drill]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.chapterKey = btn.dataset.drill;
+        state.gradeFilter = btn.dataset.grade;
+        state.trackView = 'chapter';
+        refresh();
+      });
     });
   }
 

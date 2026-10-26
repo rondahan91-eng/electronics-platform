@@ -127,6 +127,20 @@ async function callLocal(action, payload) {
     };
   }
 
+  if (action === 'fetchClassLevels') {
+    // כל שורות השלבים של כל התלמידים בקריאה אחת: מזין את מטריצת "מעקב לפי שכבה ופרק" בלוח הבקרה
+    const students = new Set(db.users.filter(u => u.role === 'student').map(u => u.studentId));
+    const out = [];
+    Object.entries(db.progress).forEach(([studentId, byTopic]) => {
+      if (!students.has(studentId)) return;
+      Object.entries(byTopic).forEach(([topicId, t]) => Object.entries(t.levels || {}).forEach(([levelId, lv]) => {
+        out.push({ studentId, topicId, levelId: Number(levelId), solved: !!lv.solved, attempts: lv.attempts || 0, dq: lv.disqualifications || 0,
+          timeSeconds: typeof lv.timeSeconds === 'number' ? lv.timeSeconds : null });
+      }));
+    });
+    return out;
+  }
+
   if (action === 'fetchClassProgress') {
     const { topicId } = payload;
     return db.users.filter(u => u.role === 'student').map(u => summarizeStudent(db, u, topicId));
@@ -290,6 +304,10 @@ export async function authenticateUser(username, password) {
 }
 export async function fetchClassProgress(topicId) {
   return dispatch('fetchClassProgress', { topicId });
+}
+/** כל שורות השלבים של כל התלמידים (studentId, topicId, levelId, solved, attempts, dq, timeSeconds). שרת ישן בלי הפעולה הזו זורק "פעולה לא מוכרת". */
+export async function fetchClassLevels() {
+  return dispatch('fetchClassLevels', {});
 }
 export async function createNewStudent(username, password, displayName, grade) {
   return dispatch('createNewStudent', { username, password, displayName, grade });
