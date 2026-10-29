@@ -432,8 +432,8 @@ function evaluate14(level, val) {
 
   // הדגל הזה מסומן *אך ורק* ב-LEVEL_DEFS_14 של שלב 18 - לעולם לא זיהוי גנרי
   // לפי אורך המחרוזת (ראו שלב 20: מחרוזת ביניים בת 5 תווים היא שם תקינה
-  // בדרך, לא פסילה).
-  if (overflowDisqualify && norm.length > width) {
+  // בדרך, לא פסילה). רק מחרוזת של 0/1: טקסט אחר ("0001." / "0b0001") הוא טעות הקלדה ולא גלישת רגיסטר.
+  if (overflowDisqualify && norm.length > width && /^[01]+$/.test(norm)) {
     const trueSum = parseInt(a, 2) + parseInt(b, 2);
     return {
       outcome: 'disqualified', value: norm,
