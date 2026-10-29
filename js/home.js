@@ -6,9 +6,9 @@
 import { SYLLABUS, chapterKey, chapterHasPractice, allChapters } from './syllabus.js';
 import { TOPICS } from './curriculum.js';
 import { mountTopic } from './game/gameEngine.js';
-import { fetchMyProgress, fetchGrades } from './api.js';
+import { fetchMyProgress, fetchGrades, peekMyProgress, peekGrades } from './api.js';
 import { CONFIG } from './config.js';
-import { shellHtml, wireShell, toast, escapeHtml } from './ui.js';
+import { shellHtml, wireShell, escapeHtml, loadFailureHtml } from './ui.js';
 import { playClick } from './game/audio.js';
 
 // נושאי התרגול שמחוברים בפועל לסילבוס. נושא שרשום ב-TOPICS אבל מנותק (שלבי הבוס, שמורים בצד) לא נספר בנקודות
@@ -16,19 +16,48 @@ function attachedTopicIds() {
   return [...new Set(allChapters().flatMap(c => (c.item.subs || []).filter(sb => sb.topicId).map(sb => sb.topicId)))];
 }
 
+let homeMountSeq = 0;
+
 export async function mountHome(app, session, onLogout) {
   let progress = {};
   let revealedSet = new Set();
   let expandedKey = null;
+  let loadFailed = false;
+  const token = String(++homeMountSeq);
+  app.dataset.home = token;
+  const revealedOf = grades => {
+    const g = (grades || []).find(x => x.grade === session.grade);
+    return g ? new Set(g.revealed || []) : null;
+  };
 
-  try {
-    progress = await fetchMyProgress(session.studentId);
-  } catch (e) { toast('שגיאה בטעינת התקדמות: ' + e.message, true); }
-  try {
-    const grades = await fetchGrades();
-    const g = grades.find(g => g.grade === session.grade);
-    if (g) revealedSet = new Set(g.revealed || []);
-  } catch (e) { toast('שגיאה בטעינת שכבה: ' + e.message, true); }
+  // כל קריאה לשרת לוקחת ~2 שניות, ולכן שתיהן יוצאות יחד ולא בזו אחר זו.
+  // חזרה מנושא (או מעבר חוזר למסך) מציגה מיד את מה שכבר בזיכרון ומתרעננת ברקע.
+  const cachedProgress = peekMyProgress(session.studentId);
+  const cachedGrades = peekGrades();
+  if (cachedProgress && cachedGrades) {
+    progress = cachedProgress;
+    revealedSet = revealedOf(cachedGrades) || revealedSet;
+    render();
+    Promise.allSettled([fetchMyProgress(session.studentId), fetchGrades()]).then(([p, g]) => {
+      const nextProgress = p.status === 'fulfilled' ? p.value : progress;
+      const nextRevealed = (g.status === 'fulfilled' && revealedOf(g.value)) || revealedSet;
+      const changed = JSON.stringify(nextProgress) !== JSON.stringify(progress)
+        || [...nextRevealed].sort().join() !== [...revealedSet].sort().join();
+      progress = nextProgress; revealedSet = nextRevealed;
+      // רק אם מסך הבית הזה עדיין על המסך (לא עברנו לנושא, לא נטענה גרסה חדשה שלו) ויש מה לעדכן
+      if (changed && app.dataset.home === token && app.querySelector('.home-wrap')) render();
+    });
+    return;
+  }
+
+  const [p, g] = await Promise.allSettled([fetchMyProgress(session.studentId), fetchGrades()]);
+  // בזמן ההמתנה אפשר היה להתנתק (נמחק ה-session) או שנטענה גרסה חדשה של מסך הבית: אל תצייר מעליהם.
+  // (לא בודקים אם טופס הכניסה עוד על המסך: בכניסה אינטראקטיבית הוא עדיין שם כשהמסך הזה נטען, והוא מוחלף בציור שלמטה)
+  if (app.dataset.home !== token || !sessionStorage.getItem(CONFIG.SESSION_KEY)) return;
+  if (p.status === 'fulfilled') progress = p.value;
+  if (g.status === 'fulfilled') revealedSet = revealedOf(g.value) || revealedSet;
+  // טעינה שנכשלה לא מצטיירת כ"0 שלבים / עוד לא נחשפו פרקים": זה נראה כהתקדמות שנמחקה. מסך שגיאה קבוע עם נסו שוב
+  loadFailed = p.status !== 'fulfilled' || g.status !== 'fulfilled';
 
   render();
 
@@ -133,6 +162,7 @@ export async function mountHome(app, session, onLogout) {
       solvedLevels += dt.done; openLevels += dt.total;
     }));
 
+    const retry = () => mountHome(app, session, onLogout);
     app.innerHTML = shellHtml(session, 'home', `
       <div class="home-wrap">
         <div class="home-head">
@@ -140,17 +170,20 @@ export async function mountHome(app, session, onLogout) {
             <div class="eyebrow">תוכנית הלימודים · מבוא להנדסת אלקטרוניקה</div>
             <h1>הפרקים שלי</h1>
           </div>
-          <div class="home-stats">
+          ${loadFailed ? '' : `<div class="home-stats">
             <div class="mini-stat"><div class="mini-stat-label">פרקים חשופים</div><div class="mini-stat-value">${officialRevealed}<span>/${totalChapters}</span></div></div>
             <div class="mini-stat"><div class="mini-stat-label">שלבים שנפתרו</div><div class="mini-stat-value">${solvedLevels}<span>/${openLevels}</span></div></div>
-          </div>
+          </div>`}
         </div>
-        ${sectionsHtml || `<div class="empty-chapters"><div class="empty-title">עוד לא נחשפו פרקים</div><div class="empty-sub">המורה חושף פרקים לפי ההתקדמות בכיתה.</div></div>`}
+        ${loadFailed ? loadFailureHtml('את הפרקים וההתקדמות')
+          : sectionsHtml || `<div class="empty-chapters"><div class="empty-title">עוד לא נחשפו פרקים</div><div class="empty-sub">המורה חושף פרקים לפי ההתקדמות בכיתה.</div></div>`}
       </div>
       <footer class="foot">${CONFIG.APP_NAME} ⚡ סימולטור למידה אינטראקטיבי</footer>`,
-      { stats: { streak: session.streakDays || 0, points: solvedLevels } });
+      loadFailed ? {} : { stats: { streak: session.streakDays || 0, points: solvedLevels } });
 
-    wireShell(onLogout, () => render(), { session, screen: 'נושאי הלימוד' });
+    wireShell(onLogout, loadFailed ? retry : () => render(), { session, screen: loadFailed ? 'נושאי הלימוד · טעינה נכשלה' : 'נושאי הלימוד' });
+    const retryBtn = document.getElementById('load-retry');
+    if (retryBtn) retryBtn.addEventListener('click', retry);
 
     app.querySelectorAll('.chapter-head').forEach(btn => {
       btn.addEventListener('click', () => {

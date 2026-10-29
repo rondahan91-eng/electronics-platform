@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { renderLogin } from './auth.js';
 import { mountHome } from './home.js';
 import { mountDashboard } from './dashboard.js';
+import { clearApiCache } from './api.js';
 
 const app = document.getElementById('app');
 
@@ -13,7 +14,7 @@ function loadSession() {
   catch { return null; }
 }
 function saveSession(user) { sessionStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(user)); }
-function clearSession() { sessionStorage.removeItem(CONFIG.SESSION_KEY); }
+function clearSession() { sessionStorage.removeItem(CONFIG.SESSION_KEY); clearApiCache(); }
 
 function route() {
   const session = loadSession();

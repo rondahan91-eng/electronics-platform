@@ -318,15 +318,59 @@ export async function updateStudentPassword(studentId, newPassword) {
 // שמירות תוצאה שעוד באוויר. המסך לא מחכה להן (הלחצן "לשלב הבא" מופיע מיד אחרי תשובה נכונה, ראו handleSuccess), ולכן קריאת
 // התקדמות שמגיעה מיד אחריהן (חזרה לפרקים/למפה) מחכה שיסתיימו, אחרת היא הייתה מחזירה מצב ישן.
 const inflightSaves = new Set();
+
+// מטמון בזיכרון הדף בלבד (נעלם ברענון ובהתנתקות). קריאה ל-Apps Script לוקחת ~2-2.5 שניות, ומסך הבית והכניסה לנושא קוראים התקדמות
+// בכל מעבר - ולכן כל חזרה מנושא למסך הבית נראתה תקועה. עם המטמון המסכים נפתחים מיד, ומסך הבית מתרענן ברקע.
+// כל שמירה מעדכנת אותו כמו שהשרת ממזג אותה (Code.gs saveLevelResult), ושמירה שנכשלה מפילה אותו - הקריאה הבאה תלך לשרת.
+const CACHE_TTL_MS = 30 * 60 * 1000; // רק רשת ביטחון: כל כניסה למסך הבית מרעננת אותו ברקע
+let progressCache = null; // { studentId, data, at }
+let gradesCache = null;   // { data, at }
+let cacheEpoch = 0;       // עולה בכל שמירה: קריאה שהתחילה לפני שמירה לא תדרוס את המטמון בתשובה ישנה
+const cloneJson = x => JSON.parse(JSON.stringify(x));
+const fresh = c => c && Date.now() - c.at < CACHE_TTL_MS;
+
+/** העתק של ההתקדמות מהמטמון, או null אם אין (או שהוא ישן). ההעתק נפרד: המנוע משנה אותו במקום. */
+export function peekMyProgress(studentId) {
+  return progressCache && progressCache.studentId === studentId && fresh(progressCache) ? cloneJson(progressCache.data) : null;
+}
+export function peekGrades() { return fresh(gradesCache) ? cloneJson(gradesCache.data) : null; }
+export function clearApiCache() { progressCache = null; gradesCache = null; cacheEpoch++; }
+
+function patchCachedProgress(studentId, topicId, levelId, { solved, timeSeconds, disqualified }) {
+  if (!progressCache || progressCache.studentId !== studentId) return;
+  const topic = progressCache.data[topicId] || (progressCache.data[topicId] = { highestLevel: 0, levels: {} });
+  const lv = topic.levels[levelId] || { solved: false, timeSeconds: null, disqualifications: 0, attempts: 0 };
+  lv.attempts = (lv.attempts || 0) + 1;
+  if (disqualified) lv.disqualifications = (lv.disqualifications || 0) + 1;
+  if (solved) {
+    lv.solved = true;
+    lv.timeSeconds = timeSeconds;
+    topic.highestLevel = Math.max(topic.highestLevel || 0, Number(levelId));
+  }
+  topic.levels[levelId] = lv;
+}
+
+// כמה שמירות עוד לא הסתיימו בשרת. בניגוד ל-inflightSaves, שמירה תקועה לא "נשכחת" כאן אחרי תקרת ההמתנה: כל עוד היא פתוחה,
+// קריאה מהשרת עלולה להחזיר מצב בלי השמירה הזו (קריאות לא ננעלות, שמירות ממתינות בתור הנעילה), ולכן לא סומכים עליה ולא שומרים אותה במטמון.
+let unsettledSaves = 0;
 export async function saveLevelResult(studentId, topicId, levelId, { solved, timeSeconds, disqualified }) {
+  cacheEpoch++;
+  patchCachedProgress(studentId, topicId, levelId, { solved, timeSeconds, disqualified });
+  unsettledSaves++;
   const p = dispatch('saveLevelResult', { studentId, topicId, levelId, solved, timeSeconds, disqualified });
-  const done = () => inflightSaves.delete(p);
+  const done = () => { inflightSaves.delete(p); unsettledSaves--; };
   inflightSaves.add(p);
-  p.then(done, done);
+  p.then(done, () => {
+    done();
+    if (progressCache && progressCache.studentId === studentId) progressCache = null; // לא מוחקים מטמון של תלמיד/ה אחר/ת שנכנס/ה בינתיים
+    cacheEpoch++;
+  });
   return p;
 }
 const SAVE_WAIT_MS = 6000; // שמירה תקועה לא תקפיא את מסך הבית: אחרי הזמן הזה קוראים התקדמות בכל זאת
 export async function fetchMyProgress(studentId) {
+  // ה-epoch נתפס *לפני* ההמתנה: שמירה חדשה שמתחילה בזמן שמחכים לקודמת חייבת לפסול גם את הקריאה הזו
+  const epoch = cacheEpoch;
   if (inflightSaves.size) {
     const pending = [...inflightSaves];
     let timer;
@@ -335,12 +379,22 @@ export async function fetchMyProgress(studentId) {
       new Promise(r => { timer = setTimeout(() => r(true), SAVE_WAIT_MS); }),
     ]);
     clearTimeout(timer);
-    if (timedOut) pending.forEach(p => inflightSaves.delete(p)); // תקועה: לא תעכב גם את הקריאות הבאות
+    if (timedOut) pending.forEach(p => inflightSaves.delete(p)); // תקועה: לא תעכב גם את הקריאות הבאות (unsettledSaves עדיין סופרת אותה)
   }
-  return dispatch('fetchMyProgress', { studentId });
+  const reflectsAllSaves = unsettledSaves === 0; // נבדק רגע לפני שליחת הקריאה: שמירה שנסגרה *בזמן* הקריאה עלולה לא להיכלל בה
+  const data = await dispatch('fetchMyProgress', { studentId });
+  if (epoch === cacheEpoch && reflectsAllSaves) {
+    progressCache = { studentId, data: cloneJson(data || {}), at: Date.now() };
+    return data;
+  }
+  // השרת אולי עוד לא קלט שמירה (תקועה / חדשה): המטמון, שכבר כולל אותה, מדויק יותר מהקריאה הזו; אם נפל (שמירה נכשלה) - הקריאה היא כל מה שיש
+  return peekMyProgress(studentId) || data;
 }
 export async function fetchGrades() {
-  return dispatch('fetchGrades', {});
+  const epoch = cacheEpoch;
+  const data = await dispatch('fetchGrades', {});
+  if (epoch === cacheEpoch) gradesCache = { data: cloneJson(data || []), at: Date.now() };
+  return data;
 }
 export async function fetchTopicLevelStats(topicId) {
   return dispatch('fetchTopicLevelStats', { topicId });

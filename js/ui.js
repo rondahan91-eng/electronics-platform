@@ -16,6 +16,16 @@ export function toast(msg, isErr = false) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
 }
 
+/** מסך "לא הצלחנו לטעון" קבוע (לא הודעה חולפת) עם נסו שוב: טעינה שנכשלה לא מוצגת כ"0 שלבים", כי זה נראה כהתקדמות שנמחקה. הלחצן: #load-retry */
+export function loadFailureHtml(what) {
+  return `
+    <div class="load-fail" role="alert">
+      <div class="empty-title">לא הצלחנו לטעון ${what} מהשרת</div>
+      <div class="empty-sub">ההתקדמות שלכם שמורה ולא נמחקה - זו רק תקלת תקשורת זמנית. נסו שוב בעוד רגע.</div>
+      <button type="button" id="load-retry" class="ground">נסו שוב</button>
+    </div>`;
+}
+
 // מסלול ניווט יחיד לכל תפקיד (תלמיד/ה→נושאי הלימוד, מורה→לוח בקרה) - פרקים
 // ותת-נושאים נכנסים מתוך העמוד עצמו, לא מה-rail (ראו Prism v2.1 README).
 const NAV_BY_ROLE = {

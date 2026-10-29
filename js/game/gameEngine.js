@@ -26,9 +26,9 @@
 // חזרה ל"כל הנושא כטווח אחד", כמו לפני הפיצול לתת-נושאים.
 // ==========================================================================
 import { playSuccess, playError, playBurn, playClick } from './audio.js';
-import { saveLevelResult, fetchMyProgress } from '../api.js';
+import { saveLevelResult, fetchMyProgress, peekMyProgress } from '../api.js';
 import { CONFIG } from '../config.js';
-import { shellHtml, wireShell, toast, fmtTime } from '../ui.js';
+import { shellHtml, wireShell, toast, fmtTime, loadFailureHtml } from '../ui.js';
 import { attachFormulaSheet } from './formulaSheet.js';
 import { parseAnswer, mountAnswerToolbar } from './answerInput.js';
 import { mathHtml, mathPlain } from './mathMarkup.js';
@@ -80,11 +80,24 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
   onLogout = (...a) => { leaveGuard(); return origLogout(...a); };
   if (!preview) {
     try {
-      const all = await fetchMyProgress(session.studentId);
+      // התקדמות שכבר בזיכרון (נטענה במסך הבית ומתעדכנת בכל שמירה) לא ממתינה שוב ~2 שניות לשרת
+      const all = peekMyProgress(session.studentId) || await fetchMyProgress(session.studentId);
       state.allProgress = all || {};
       state.progress = (all && all[topic.id]) || { highestLevel: 0, levels: {} };
       hadAttemptsAtMount = Object.values(state.progress.levels || {}).some(l => (l.attempts || 0) > 0);
-    } catch (e) { toast('שגיאה בטעינת התקדמות: ' + e.message, true); }
+    } catch (e) {
+      // טעינה שנכשלה לא נפתחת כמפה ריקה (שלב 1 בלבד פתוח): זה נראה כהתקדמות שנמחקה. מסך שגיאה קבוע עם נסו שוב וחזרה
+      leaveGuard();
+      app.innerHTML = shellHtml(session, 'home', `
+        <div class="map-wrap">
+          <button type="button" class="map-back" id="back-home">→ חזרה לפרקים</button>
+          ${loadFailureHtml('את ההתקדמות בנושא')}
+        </div>`, {});
+      wireShell(origLogout, origBack, { session, screen: `מפת השלבים · טעינה נכשלה · ${topic.title}` });
+      document.getElementById('back-home').addEventListener('click', origBack);
+      document.getElementById('load-retry').addEventListener('click', () => mountTopic(app, session, topic, origBack, origLogout, opts));
+      return;
+    }
   }
 
   function shellStats() {

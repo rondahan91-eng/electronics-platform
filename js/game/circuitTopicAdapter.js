@@ -16,9 +16,22 @@ const MAGNITUDE_MSG = 'התבקש גודל, ולכן התשובה חיובית. 
 // הערכה יחסית בלבד (3%, בלי רצפה מוחלטת): תשובה קטנה כמו 0.008 חייבת להיות קרובה אליה באמת.
 const near = (x, target) => Math.abs(x - target) <= Math.abs(target) * CONFIG.ANSWER_TOLERANCE_PCT;
 
+// הערך הנכון בכפולת 1000 (mA↔A, kΩ↔Ω...) - טעות יחידה ולא טעות חישוב. נבדק לפני בדיקת העומס: 109.1 שהוקלד במקום 0.1091 A
+// היה מקבל "R1 נשרף!" (ההספק ההיפותטי של 109 A) במקום להסביר שהמספר בסדר והיחידה לא.
+const UNIT_FACTORS = [1e3, 1e6, 1e-3, 1e-6];
+const unitSlip = (q, val) => q.answer !== 0 && val !== 0 && UNIT_FACTORS.some(f => near(val, q.answer * f));
+const SLIP_EXAMPLE = { A: 'mA במקום A', V: 'mV במקום V', W: 'mW במקום W', 'Ω': 'kΩ במקום Ω' };
+
 function evaluateCircuitAnswer(level, val) {
   const q = level.question;
   const target = q.targetId && level.circuitKind === 'tree' ? findNode(level.root, q.targetId) : null;
+
+  if (!level.noBurn && !near(val, q.answer) && unitSlip(q, val)) {
+    return {
+      outcome: 'incorrect',
+      message: `⚠️ שימו לב ליחידה: התשובה מתבקשת ב-${q.unit}. המספר שהקלדתם קרוב לתוצאה, אבל כנראה ביחידה אחרת${SLIP_EXAMPLE[q.unit] ? ` (למשל ${SLIP_EXAMPLE[q.unit]})` : ''}. המירו ונסו שוב.`,
+    };
+  }
 
   // בדיקת עומס-יתר (הספק) - רלוונטית לשאלות זרם/מתח/הספק על נגד.
   // שלבים עם level.noBurn (שלבי המרת היחידות) מדלגים עליה לגמרי. הערך שהוקלד הוא ביחידה המבוקשת (mA, mW...),
