@@ -16,6 +16,11 @@ import { CONFIG } from '../config.js';
 
 const roundTo = (x, d = 4) => Math.round(x * 10 ** d) / 10 ** d;
 const dirArrowText = (dir) => (dir === 'AtoB' ? 'A → B' : 'B → A');
+// נתוני השאלה (question.data): כל נתון בשורה נפרדת בכרטיס השאלה, ולא בתוך המשפט (כמו בפרקי ה-DC)
+const row = (label, value, unit) => ({ label, value: unit ? `${value} ${unit}` : String(value) });
+const dataQ = (Q) => row('המטען שעבר Q', Q, 'C');
+const dataT = (t) => row('משך הזמן t', t, 's');
+const dataI = (I) => row('הזרם I', I, 'A');
 
 const LEVEL_DEFS = [
   // --- יסודי: הצבה ישירה I=Q/t, מספרים עגולים ---
@@ -52,7 +57,8 @@ function generateDirectLevel(localId, def) {
       type: 'direct', find: 'Q', Q, t: def.t, I: def.I, context: def.context,
       title: `כמה מטען עבר? #${localId}`,
       desc: `דרך חתך הרוחב של ${def.context} זורם זרם קבוע של I=${def.I}A, במשך זמן של t=${def.t} שניות. חשבו את כמות המטען הכוללת Q שעברה דרך החתך באותו זמן.`,
-      prompt: `זרם של I=${def.I}A זורם דרך חתך רוחב של תיל במשך t=${def.t} שניות. איזה מטען כולל Q עבר דרך החתך?`,
+      prompt: 'זרם קבוע זורם דרך חתך רוחב של תיל. איזה מטען כולל Q עבר דרך החתך?',
+      data: [dataI(def.I), dataT(def.t)],
       answer: Q, unit: 'C',
     };
   }
@@ -62,7 +68,8 @@ function generateDirectLevel(localId, def) {
       type: 'direct', find: 't', Q: def.Q, I: def.I, t, context: def.context,
       title: `כמה זמן לקח? #${localId}`,
       desc: `דרך חתך הרוחב של ${def.context} זורם זרם קבוע של I=${def.I}A, עד שעבר מטען כולל של Q=${def.Q} קולון. חשבו כמה זמן (t) לקח לכך.`,
-      prompt: `זרם של I=${def.I}A זורם דרך חתך רוחב של תיל, עד שעובר מטען כולל Q=${def.Q}C. כמה זמן (t) לקח לכך?`,
+      prompt: 'זרם קבוע זורם דרך חתך רוחב של תיל, עד שעובר דרכו מטען כולל. כמה זמן (t) לקח לכך?',
+      data: [dataI(def.I), dataQ(def.Q)],
       answer: t, unit: " שנ'",
     };
   }
@@ -71,7 +78,8 @@ function generateDirectLevel(localId, def) {
     type: 'direct', find: 'I', Q: def.Q, t: def.t, context: def.context,
     title: `מהו הזרם? #${localId}`,
     desc: `דרך חתך הרוחב של ${def.context} עובר מטען כולל של Q=${def.Q} קולון, במשך זמן של t=${def.t} שניות. חשבו את עוצמת הזרם החשמלי I הזורם בתיל.`,
-    prompt: `מטען של Q=${def.Q}C עובר דרך חתך רוחב של תיל בזמן t=${def.t} שניות. מהו הזרם I?`,
+    prompt: 'מטען עובר דרך חתך רוחב של תיל. מהו הזרם I?',
+    data: [dataQ(def.Q), dataT(def.t)],
     answer: current, unit: 'A',
   };
 }
@@ -84,7 +92,8 @@ function generateDirectionLevel(localId, def) {
     type: 'direction', Q: def.Q, t: def.t, context: def.context, electronDir: def.electronDir, currentDir,
     title: `כיוון הזרם #${localId}`,
     desc: `בקטע תיל בין שני הדקים A ל-B, האלקטרונים החופשיים זורמים בפועל בכיוון ${dirArrowText(def.electronDir)}. דרך חתך הרוחב שלו עובר מטען של Q=${def.Q} קולון במשך t=${def.t} שניות. קבעו את גודל וכיוון הזרם החשמלי המוסכם I.`,
-    prompt: `האלקטרונים בתיל זורמים בפועל בכיוון ${dirArrowText(def.electronDir)}. מטען Q=${def.Q}C עובר דרך חתך רוחב שלו בזמן t=${def.t} שניות. מהו הזרם המוסכם I (גודל וכיוון)? הזינו ערך חיובי אם כיוונו A→B, ושלילי אם כיוונו B→A.`,
+    prompt: 'מטען עובר דרך חתך רוחב של קטע תיל בין שני ההדקים A ו-B. מהו הזרם המוסכם I (גודל וכיוון)?<br>הזינו ערך חיובי אם כיוונו A→B, ושלילי אם כיוונו B→A.',
+    data: [row('כיוון תנועת האלקטרונים בפועל', dirArrowText(def.electronDir)), dataQ(def.Q), dataT(def.t)],
     answer, unit: 'A',
   };
 }
@@ -126,7 +135,7 @@ export function generateCurrentLevel(localId) {
     ];
   }
 
-  const question = { type: g.type, find: g.find, prompt: g.prompt, unit: g.unit, answer: g.answer, hints, Q: g.Q, t: g.t, I: g.I };
+  const question = { type: g.type, find: g.find, prompt: g.prompt, data: g.data, unit: g.unit, answer: g.answer, hints, Q: g.Q, t: g.t, I: g.I };
   if (g.type === 'direction') { question.electronDir = g.electronDir; question.currentDir = g.currentDir; }
   // "קצר חשמלי" - שייך רק לשלבים שבהם val מייצג *זרם* (לא מטען כולל/זמן) -
   // זרם גדול בהרבה מהריאלי פוסל את הניסיון, אותו עיקרון פיזיקלי-פדגוגי

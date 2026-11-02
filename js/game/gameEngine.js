@@ -289,9 +289,15 @@ export async function mountTopic(app, session, topic, onBack, onLogout, opts = {
           ${topic.hintsOnCircuit ? `<button type="button" class="arena-hint-btn" id="arena-hint-btn" aria-label="רמז: מופיע על גבי המעגל">💡 רמז <span id="arena-hint-count">0</span>/${(q.hints || []).length}</button>` : ''}
         </div>
 
-        <div class="game-grid">
+        <div class="game-grid${custom ? '' : ' game-split'}">
+          ${custom ? '' : `<section class="q-card glass" aria-label="השאלה">
+            <div class="card-label">השאלה</div>
+            <div class="qa-question">${mathHtml(q.prompt)}</div>
+            ${dataRows}
+            ${q.unit ? `<div class="q-unit"><span class="ask-target">(יחידות: ${q.unit})</span></div>` : ''}
+          </section>`}
           <div class="qa-panel glass${custom ? ' qa-panel-custom' : ''}">
-            ${custom ? '<div class="custom-panel" id="custom-panel"></div>' : `<div class="qa-question">${mathHtml(q.prompt)}${q.unit ? ` <span class="ask-target">(יחידות: ${q.unit})</span>` : ''}${dataRows}</div>
+            ${custom ? '<div class="custom-panel" id="custom-panel"></div>' : `<div class="card-label">הפתרון</div>
             ${lines ? linesHtml : `<div class="qa-row">
               <div class="field">
                 <label>התשובה שלך</label>

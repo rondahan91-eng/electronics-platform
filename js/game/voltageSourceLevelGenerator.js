@@ -24,7 +24,12 @@ function generateForLocal(localId) {
   return {
     title: `מקור בעומס #${localId}`,
     desc: `מקור מתח עם כא"מ ε=${def.emf}V והתנגדות פנימית r=${def.r}Ω מחובר בטור ל${def.deviceName} בעלת התנגדות R=${def.R}Ω, הדורשת מתח של לפחות ${def.vMin}V כדי לפעול כראוי. חשבו את המתח בפועל בהדקי המקור - הוא לא בהכרח שווה ל-ε!`,
-    prompt: `מקור מתח: ε=${def.emf}V, התנגדות פנימית r=${def.r}Ω. עומס חיצוני בטור: R=${def.R}Ω. מהו המתח (V) בהדקי המקור כאשר הוא מחובר לעומס הזה?`,
+    prompt: 'מקור מתח עם התנגדות פנימית מחובר בטור לעומס חיצוני. מהו המתח (V) בהדקי המקור כאשר הוא מחובר לעומס הזה?',
+    data: [
+      { label: 'הכא"מ של המקור ε', value: `${def.emf} V` },
+      { label: 'ההתנגדות הפנימית r', value: `${def.r} Ω` },
+      { label: 'העומס החיצוני בטור R', value: `${def.R} Ω` },
+    ],
     answer: terminalV,
     unit: 'V',
     emf: def.emf, r: def.r, R: def.R, vMin: def.vMin, deviceName: def.deviceName,
@@ -37,7 +42,7 @@ export function generateVoltageLevel(localId) {
   const g = generateForLocal(localId);
 
   const question = {
-    prompt: g.prompt, unit: g.unit, answer: g.answer,
+    prompt: g.prompt, data: g.data, unit: g.unit, answer: g.answer,
     hints: [
       'חוק אוהם למעגל שלם (מקור + עומס בטור): I = ⟦ε⁄R + r⟧',
       'המתח בהדקי המקור הוא המתח הנופל על העומס החיצוני בלבד: V = I·R (לא ε!).',

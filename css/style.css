@@ -444,6 +444,19 @@ button.subtopic-row:not(.clickable) { cursor: default; }
 .qa-question { font-size: 15px; margin-bottom: 16px; line-height: 1.7; color: var(--px-ink); }
 .qa-question .ask-target { color: #b8860b; font-weight: 800; }
 
+/* מסך תרגול רגיל: חצי לשאלה (כרטיס ממוסגר: ניסוח, נתונים כל אחד בשורה, יחידות) וחצי לפתרון - תיבת התשובה לא צריכה את כל הרוחב.
+   הימני (הראשון ב-RTL) הוא השאלה. פאנל מותאם (topic.mountPanel) לא משתתף: הוא נשאר ברוחב מלא. בטלפון/מסך צר - בזה אחר זה. */
+.game-grid.game-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.game-split .q-card { padding: 22px 24px 24px; border: 1.5px solid var(--px-hairline-strong); }
+.game-split .qa-panel { padding: 22px 24px 24px; }
+.card-label { display: inline-block; margin-bottom: 14px; padding: 4px 11px; border-radius: 999px; background: var(--px-paper-sunken); font: 700 12px/1.3 var(--font-main); color: var(--px-ink-soft); }
+.q-card .qa-question { margin-bottom: 0; font-size: 16px; }
+.q-card .q-data { max-width: none; margin-top: 16px; }
+.q-card .q-unit { margin-top: 16px; }
+/* בחצי הרוחב תיבת התשובה מקבלת שורה משלה (לא נדחסת לצד הלחצנים), והלחצנים יורדים מתחתיה */
+.game-split .qa-row .field { flex: 1 1 100%; }
+@media (max-width: 1000px) { .game-grid.game-split { grid-template-columns: minmax(0, 1fr); } }
+
 /* נתוני השאלה (question.data): כל נתון בשורה נפרדת - תווית מימין, ערך LTR
    משמאל, ובינהם קו מנחה מנוקד. ברוחב מוגבל כדי שהעין לא תצטרך לחצות את כל
    הלוח; בלי כרטיס כבד - רק פס צד עדין. */
